@@ -177,9 +177,13 @@ function validateFloorplanDraft(draft = {}) {
       issues.push({ code: 'opening-attached-wall-missing', severity: 'review', entityId: id, relatedEntityId: String(attachedWallId) });
       return;
     }
-    if (attachedWallId && wallIdsForAttachment.has(String(attachedWallId)) && !opening.needsWallAttachmentReview) {
+    if (!attachedWallId) {
+      issues.push({ code: 'opening-wall-attachment-missing', severity: 'review', entityId: id });
+      return;
+    }
+    if (!opening.needsWallAttachmentReview) {
       wallAttachedOpeningCount += 1;
-    } else if (opening.needsWallAttachmentReview) {
+    } else {
       issues.push({ code: 'opening-wall-attachment-review', severity: 'review', entityId: id });
     }
   });
