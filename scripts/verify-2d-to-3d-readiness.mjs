@@ -158,6 +158,19 @@ assert(
   'Finalization must preserve structured upstream issues in the serialized issue list.'
 );
 
+const invalidFinalizedDraft = finalizeRecognitionDraft({
+  rooms: [
+    { id: 'bad-room-a', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 },
+    { id: 'bad-room-b', name: '卧室', type: 'bedroom', x: 40, y: 40, width: 100, height: 100 }
+  ],
+  walls: [{ id: 'zero-wall', start: { x: 10, y: 10 }, end: { x: 10, y: 10 } }],
+  doors: [],
+  windows: [],
+  quality: { needsReview: false }
+});
+assert(invalidFinalizedDraft.quality.needsReview, 'Spatial validation failures must force the recognition review gate.');
+assert(invalidFinalizedDraft.quality.spatialValidation.errorCount > 0, 'Finalized quality must expose spatial validation error counts.');
+
 
 
 const job = {
