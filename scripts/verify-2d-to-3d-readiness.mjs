@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { buildRecognitionDraft, assignOcrSemantics } = require('../codex-worker/src/recognizers/local-draft.js');
+const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
 const { buildSpatialGraph, validateFloorplanDraft } = require('../codex-worker/src/recognizers/spatial-reasoning.js');
 const { buildRecoveryPrompt, normalizeRecognitionDraft } = require('../codex-worker/src/recognizers/ai-command.js');
@@ -121,6 +121,20 @@ const overlapping = validateFloorplanDraft({
 assert(!overlapping.valid, 'Zero-length walls must fail geometry validation.');
 assert(overlapping.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Overlapping room bounds must be flagged for review.');
 assert(overlapping.issues.some(issue => issue.code === 'door-not-associated-with-room'), 'Doors outside all rooms must be flagged.');
+
+// Finalization must not silently discard structured diagnostics produced by
+// upstream recognizers; downstream logs should retain their code and entity.
+const finalizedWithStructuredIssue = finalizeRecognitionDraft({
+  rooms: [{ id: 'review-room', name: '待核实空间', type: 'space', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [],
+  doors: [],
+  windows: [],
+  issues: [{ code: 'upstream-warning', severity: 'review', entityId: 'review-room' }]
+});
+assert(
+  finalizedWithStructuredIssue.issues.some(issue => issue.includes('upstream-warning') && issue.includes('review-room')),
+  'Finalization must preserve structured upstream issues in the serialized issue list.'
+);
 
 
 
