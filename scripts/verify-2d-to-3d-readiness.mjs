@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { countVerifiedAttachedOpenings } from './benchmark-kujiale-structure-recognition.mjs';
 
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
@@ -77,6 +78,13 @@ assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not
 assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
 assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
 assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
+const benchmarkAttachedCount = countVerifiedAttachedOpenings([
+  { id: 'known-good', attachedWallId: 'wall-1' },
+  { id: 'no-wall-reference' },
+  { id: 'stale-wall-reference', attachedWallId: 'wall-deleted' },
+  { id: 'pending-review', attachedWallId: 'wall-1', needsWallAttachmentReview: true }
+], [{ id: 'wall-1' }]);
+assert(benchmarkAttachedCount === 1, 'Benchmark must count only openings with an explicit existing wall reference and no review flag.');
 
 // Recovery regression: weak first-pass drafts should be reviewed using the
 // complete initial draft, with explicit anti-hallucination constraints.
