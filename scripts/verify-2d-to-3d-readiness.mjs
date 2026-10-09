@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { countVerifiedAttachedOpenings as countBenchmarkAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
-import { countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
+import { collectCandidates, countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
 
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
@@ -17,7 +17,7 @@ function assert(condition, message) {
   }
 }
 
-function makeTemplateOnlyPreprocess() {
+function assertThrows(fn, message) {\n  let threw = false;\n  try { fn(); } catch (_) { threw = true; }\n  assert(threw, message);\n}\n\nfunction makeTemplateOnlyPreprocess() {
   return {
     image: { width: 1000, height: 760 },
     quality: { score: 0.42, issues: ['no-stable-wall-grid'] },
@@ -86,6 +86,14 @@ const benchmarkAttachedCount = countBenchmarkAttachedOpenings([
   { id: 'pending-review', attachedWallId: 'wall-1', needsWallAttachmentReview: true }
 ], [{ id: 'wall-1' }]);
 assert(benchmarkAttachedCount === 1, 'Benchmark must count only openings with an explicit existing wall reference and no review flag.');
+const candidateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'floorplan-image-input-'));
+const candidateImage = path.join(candidateRoot, 'actual-floor-plan.png');
+fs.writeFileSync(candidateImage, 'test-image-placeholder');
+assert(collectCandidates({ imagePath: candidateImage }).length === 1, 'Batch recognition must accept one explicit floor-plan image path for real-image testing.');
+assert(collectCandidates({ imagePath: candidateImage })[0] === candidateImage, 'Explicit image input must be passed through without silently substituting another sample.');
+assertThrows(() => collectCandidates({ imagePath: path.join(candidateRoot, 'missing.png') }), 'Missing explicit image paths must fail clearly.');
+fs.rmSync(candidateRoot, { recursive: true, force: true });
+
 assert(countBatchAttachedOpenings([
   { id: 'verified', attachedWallId: 'w1' },
   { id: 'missing-ref' },
