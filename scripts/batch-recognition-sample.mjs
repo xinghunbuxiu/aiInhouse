@@ -28,7 +28,17 @@ function parseLayout(filePath) {
   };
 }
 
-function collectCandidates() {
+export function collectCandidates({ imagePath = '', repoRoot = root } = {}) {
+  if (imagePath) {
+    const resolvedImage = path.resolve(imagePath);
+    if (!fs.existsSync(resolvedImage) || !fs.statSync(resolvedImage).isFile()) {
+      throw new Error(`Input floor-plan image does not exist or is not a file: ${resolvedImage}`);
+    }
+    if (!/\.(jpe?g|png|webp)$/i.test(resolvedImage)) {
+      throw new Error(`Unsupported floor-plan image format: ${resolvedImage}. Use JPG, PNG, or WEBP.`);
+    }
+    return [resolvedImage];
+  }
   const patterns = [
     '2室2厅1厨1卫',
     '2室2厅1厨2卫',
@@ -42,8 +52,8 @@ function collectCandidates() {
     '2室1厅1厨1卫'
   ];
   const roots = [
-    path.join(root, 'backend/uploads/floorplans/kujiale-xinfu'),
-    path.join(root, 'backend/uploads/floorplans/kujiale')
+    path.join(repoRoot, 'backend/uploads/floorplans/kujiale-xinfu'),
+    path.join(repoRoot, 'backend/uploads/floorplans/kujiale')
   ];
   const all = [];
   for (const base of roots) {
@@ -72,8 +82,8 @@ function collectCandidates() {
   }
 
   const locals = [
-    path.join(root, 'backend/uploads/file-1781863511304-851193311.jpg'),
-    path.join(root, 'backend/uploads/file-1781963251222-579906215.jpg')
+    path.join(repoRoot, 'backend/uploads/file-1781863511304-851193311.jpg'),
+    path.join(repoRoot, 'backend/uploads/file-1781963251222-579906215.jpg')
   ].filter((file) => fs.existsSync(file));
 
   return [...locals, ...picked];
@@ -149,7 +159,7 @@ function evaluateImage(filePath, outputDir) {
     roomNames: (repaired.rooms || []).map((room) => room.name || room.id),
     walls: (repaired.walls || []).length,
     openings: openings.length,
-    attachedOpeningRatio: Number(attachedOpeningRatio.toFixed(2)),
+    attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
     readinessStatus: readiness.status || 'unknown',
     readinessScore: readiness.score ?? null,
     blockingReasons: readiness.blockingReasons || [],
@@ -183,7 +193,8 @@ function summarize(results) {
 function main() {
   const limit = Number(getArg('--limit', '12')) || 12;
   const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
-  const discoveredImages = collectCandidates();
+  const requestedImage = getArg('--image');
+  const discoveredImages = collectCandidates({ imagePath: requestedImage });
   if (discoveredImages.length === 0) {
     throw new Error(
       'No floor-plan images found for batch recognition. Check backend/uploads/floorplans/kujiale(-xinfu), or add one of the configured local upload images before running this script.'
