@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { countVerifiedAttachedOpenings as countBenchmarkAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
-import { collectCandidates, countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
+import { collectCandidates, parseLayout as parseBatchLayout, countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
 
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
@@ -97,6 +97,7 @@ const candidateImage = path.join(candidateRoot, 'actual-floor-plan.png');
 fs.writeFileSync(candidateImage, 'test-image-placeholder');
 assert(collectCandidates({ imagePath: candidateImage }).length === 1, 'Batch recognition must accept one explicit floor-plan image path for real-image testing.');
 assert(collectCandidates({ imagePath: candidateImage })[0] === candidateImage, 'Explicit image input must be passed through without silently substituting another sample.');
+assert(parseBatchLayout(candidateImage, '3室2厅1厨2卫').layout === '3室2厅1厨2卫', 'Explicit ground-truth layout must override an unlabeled filename for actual floor-plan evaluation.');
 assertThrows(() => collectCandidates({ imagePath: path.join(candidateRoot, 'missing.png') }), 'Missing explicit image paths must fail clearly.');
 fs.rmSync(candidateRoot, { recursive: true, force: true });
 
