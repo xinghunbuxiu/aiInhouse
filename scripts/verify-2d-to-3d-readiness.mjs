@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
+const { buildRecoveryPrompt, normalizeRecognitionDraft } = require('../codex-worker/src/recognizers/ai-command.js');
 
 function assert(condition, message) {
   if (!condition) {
@@ -73,6 +74,22 @@ const adjacentRooms = assignOcrSemantics([
 assert(adjacentRooms[0].name === '空间A', 'OCR labels outside a room must not relabel that room.');
 assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not turn an elevator/adjacent space into a bathroom.');
 assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
+
+// Recovery regression: weak first-pass drafts should be reviewed using the
+// complete initial draft, with explicit anti-hallucination constraints.
+const firstPassDraft = normalizeRecognitionDraft({
+  rooms: [{ name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.4 }],
+  walls: [],
+  doors: [],
+  windows: [],
+  confidence: { geometry: 0.4, semantics: 0.4 }
+});
+assert(firstPassDraft.quality.needsReview, 'A weak first-pass result must trigger recovery.');
+const recoveryPrompt = buildRecoveryPrompt('原始户型识别任务', firstPassDraft);
+assert(recoveryPrompt.includes('第一次识别结果'), 'Recovery prompt must explicitly identify the first-pass draft.');
+assert(recoveryPrompt.includes('电梯井、管道井、设备平台'), 'Recovery prompt must protect special structural spaces.');
+assert(recoveryPrompt.includes(JSON.stringify(firstPassDraft, null, 2)), 'Recovery prompt must include the actual first-pass draft.');
+
 
 const job = {
   job: {
