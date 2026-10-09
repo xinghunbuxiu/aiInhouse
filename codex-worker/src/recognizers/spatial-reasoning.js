@@ -168,6 +168,21 @@ function validateFloorplanDraft(draft = {}) {
     const p = opening.center || opening.position || opening;
     return point(p) && rooms.some(room => pointInRoom(p, room, 3));
   }).length;
+  const wallIdsForAttachment = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  let wallAttachedOpeningCount = 0;
+  openings.forEach((opening, index) => {
+    const id = String(opening.id || `opening-${index + 1}`);
+    const attachedWallId = opening.attachedWallId || opening.sourceEvidence?.attachedWallId;
+    if (attachedWallId && !wallIdsForAttachment.has(String(attachedWallId))) {
+      issues.push({ code: 'opening-attached-wall-missing', severity: 'review', entityId: id, relatedEntityId: String(attachedWallId) });
+      return;
+    }
+    if (attachedWallId && wallIdsForAttachment.has(String(attachedWallId)) && !opening.needsWallAttachmentReview) {
+      wallAttachedOpeningCount += 1;
+    } else if (opening.needsWallAttachmentReview) {
+      issues.push({ code: 'opening-wall-attachment-review', severity: 'review', entityId: id });
+    }
+  });
   const bySeverity = issues.reduce((counts, issue) => {
     counts[issue.severity] = (counts[issue.severity] || 0) + 1;
     return counts;
@@ -187,6 +202,8 @@ function validateFloorplanDraft(draft = {}) {
     openingCount: openings.length,
     associatedOpeningCount,
     openingAssociationRatio: ratio(associatedOpeningCount, openings.length),
+    wallAttachedOpeningCount,
+    wallAttachmentRatio: ratio(wallAttachedOpeningCount, openings.length),
     issueCount: issues.length,
     errorCount: bySeverity.error || 0,
     reviewCount: bySeverity.review || 0,
