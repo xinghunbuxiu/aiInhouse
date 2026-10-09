@@ -127,9 +127,12 @@ function evaluateImage(filePath, outputDir) {
   const repaired = repairRecognitionTopology(draft);
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
   const readiness = repaired.quality?.commercialReadiness || {};
-  const attachedOpeningRatio = openings.length
-    ? (openings.length - openings.filter((item) => item.needsWallAttachmentReview).length) / openings.length
-    : 0;
+  const wallIds = new Set((repaired.walls || []).map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  const verifiedAttachedOpenings = openings.filter((item) => {
+    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
+    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
+  }).length;
+  const attachedOpeningRatio = openings.length ? verifiedAttachedOpenings / openings.length : null;
 
   return {
     image: filePath,
@@ -162,18 +165,26 @@ function summarize(results) {
     commercialReady: ready.length,
     needsHumanReview: review.length,
     blocked: blocked.length,
-    commercialReadyRate: Number((ready.length / Math.max(1, valid.length) * 100).toFixed(1)),
+    commercialReadyRate: valid.length ? Number((ready.length / valid.length * 100).toFixed(1)) : null,
     avgReadinessScore: Number((valid.reduce((sum, row) => sum + Number(row.readinessScore || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgGeometryConfidence: Number((valid.reduce((sum, row) => sum + Number(row.geometryConfidence || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgSemanticsConfidence: Number((valid.reduce((sum, row) => sum + Number(row.semanticsConfidence || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgRooms: Number((valid.reduce((sum, row) => sum + row.rooms, 0) / Math.max(1, valid.length)).toFixed(1)),
-    avgAttachedOpeningRatio: Number((valid.reduce((sum, row) => sum + row.attachedOpeningRatio, 0) / Math.max(1, valid.length)).toFixed(2))
+    avgAttachedOpeningRatio: valid.length && valid.some((row) => row.attachedOpeningRatio != null)
+      ? Number((valid.filter((row) => row.attachedOpeningRatio != null).reduce((sum, row) => sum + row.attachedOpeningRatio, 0) / valid.filter((row) => row.attachedOpeningRatio != null).length).toFixed(2))
+      : null
   };
 }
 
 const limit = Number(getArg('--limit', '12')) || 12;
 const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
-const images = collectCandidates().slice(0, limit);
+const discoveredImages = collectCandidates();
+if (discoveredImages.length === 0) {
+  throw new Error(
+    'No floor-plan images found for batch recognition. Check backend/uploads/floorplans/kujiale(-xinfu), or add one of the configured local upload images before running this script.'
+  );
+}
+const images = discoveredImages.slice(0, limit);
 fs.mkdirSync(outputRoot, { recursive: true });
 
 const results = [];
@@ -208,5 +219,5 @@ for (const row of results) {
     console.log(`- ${row.name}: ERROR ${row.error}`);
     continue;
   }
-  console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${(row.attachedOpeningRatio * 100).toFixed(0)}%`);
+  console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${row.attachedOpeningRatio == null ? 'N/A' : `${(row.attachedOpeningRatio * 100).toFixed(0)}%`}`);
 }
