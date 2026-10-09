@@ -183,6 +183,40 @@ function validateFloorplanDraft(draft = {}) {
       issues.push({ code: 'opening-wall-attachment-review', severity: 'review', entityId: id });
     }
   });
+  // Attach only evidence that already exists on the detected entity. This lets
+  // reviewers jump from a diagnostic back to the originating image candidate
+  // without fabricating pixel coordinates for entities that lack provenance.
+  const evidenceEntities = [
+    ...rooms.map((entity, index) => ({ kind: 'room', id: String(entity.id || `room-${index + 1}`), entity })),
+    ...walls.map((entity, index) => ({ kind: 'wall', id: String(entity.id || `wall-${index + 1}`), entity })),
+    ...doors.map((entity, index) => ({ kind: 'door', id: String(entity.id || `door-${index + 1}`), entity })),
+    ...windows.map((entity, index) => ({ kind: 'window', id: String(entity.id || `window-${index + 1}`), entity }))
+  ];
+  const describeEvidence = (entry) => {
+    if (!entry) return null;
+    const entity = entry.entity || {};
+    const geometry = entry.kind === 'room'
+      ? { x: entity.x, y: entity.y, width: entity.width, height: entity.height }
+      : entry.kind === 'wall'
+        ? { start: entity.start, end: entity.end, thickness: entity.thickness }
+        : { x: entity.x, y: entity.y, center: entity.center, position: entity.position, width: entity.width, height: entity.height };
+    return {
+      kind: entry.kind,
+      entityId: entry.id,
+      source: entity.source || null,
+      sourceEvidence: entity.sourceEvidence || null,
+      geometry
+    };
+  };
+  const enrichedIssues = issues.map(issue => {
+    const matches = evidenceEntities.filter(entry => entry.id === String(issue.entityId || ''));
+    const relatedMatches = evidenceEntities.filter(entry => entry.id === String(issue.relatedEntityId || ''));
+    return {
+      ...issue,
+      ...(matches.length ? { entityEvidence: matches.map(describeEvidence) } : {}),
+      ...(relatedMatches.length ? { relatedEntityEvidence: relatedMatches.map(describeEvidence) } : {})
+    };
+  });
   const bySeverity = issues.reduce((counts, issue) => {
     counts[issue.severity] = (counts[issue.severity] || 0) + 1;
     return counts;
@@ -213,7 +247,7 @@ function validateFloorplanDraft(draft = {}) {
   return {
     valid: !issues.some(issue => issue.severity === 'error'),
     reviewRequired: issues.some(issue => issue.severity === 'review'),
-    issues,
+    issues: enrichedIssues,
     metrics,
     graph: buildSpatialGraph(draft)
   };
