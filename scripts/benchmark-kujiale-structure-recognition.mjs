@@ -190,6 +190,14 @@ function countAssetMatched(list = []) {
   return list.filter((item) => item?.assetMatch?.assetId).length;
 }
 
+export function countVerifiedAttachedOpenings(openings = [], walls = []) {
+  const wallIds = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  return openings.filter((item) => {
+    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
+    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
+  }).length;
+}
+
 function geometryProxyMetrics(preprocessing, repaired) {
   const geometry = preprocessing.geometryCandidates || {};
   const assets = preprocessing.recognitionAssets || {};
@@ -274,13 +282,8 @@ export function evaluateStructureSample(sample, manifest, options) {
 
   const rooms = repaired.rooms || [];
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
-  const wallIds = new Set((repaired.walls || []).map((wall, index) => String(wall.id || `wall-${index + 1}`)));
-  // Count an opening as attached only when it explicitly references an existing
-  // wall and is not awaiting review. Merely lacking a review flag is not proof.
-  const attachedOpeningCount = openings.filter((item) => {
-    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
-    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
-  }).length;
+  // Merely lacking a review flag is not proof of wall attachment.
+  const attachedOpeningCount = countVerifiedAttachedOpenings(openings, repaired.walls || []);
   const attachedOpeningRatio = openings.length ? attachedOpeningCount / openings.length : null;
   const spatialValidation = repaired.quality?.spatialValidation || {};
   const spatialMetrics = spatialValidation.metrics || {};
