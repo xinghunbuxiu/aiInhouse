@@ -28,19 +28,58 @@ function getFileSize(filePath) {
 }
 
 function getImageMeta(filePath) {
+  // Use the native macOS reader when available, then fall back to parsing
+  // common image headers so Linux/Windows still report dimensions without Pillow.
   const output = run('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', filePath]);
-  if (output.status !== 0) {
-    return { width: 0, height: 0 };
+  if (output.status === 0) {
+    const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
+    const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
+    if (widthMatch && heightMatch) {
+      return { width: Number(widthMatch[1]), height: Number(heightMatch[1]) };
+    }
   }
 
-  const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
-  const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
-  return {
-    width: widthMatch ? Number(widthMatch[1]) : 0,
-    height: heightMatch ? Number(heightMatch[1]) : 0
-  };
+  try {
+    const buffer = fs.readFileSync(filePath);
+    // PNG: width and height are unsigned big-endian integers in IHDR.
+    if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+    // GIF: logical screen width/height are little-endian 16-bit values.
+    if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'GIF') {
+      return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+    }
+    // JPEG: walk marker segments until a Start Of Frame marker is found.
+    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let offset = 2;
+      while (offset + 4 <= buffer.length) {
+        if (buffer[offset] !== 0xff) {
+          offset += 1;
+          continue;
+        }
+        while (offset < buffer.length && buffer[offset] === 0xff) offset += 1;
+        if (offset >= buffer.length) break;
+        const marker = buffer[offset++];
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) continue;
+        if (offset + 2 > buffer.length) break;
+        const segmentLength = buffer.readUInt16BE(offset);
+        if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
+        const startOfFrame = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker);
+        if (startOfFrame && segmentLength >= 7) {
+          return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+        }
+        offset += segmentLength;
+      }
+    }
+    // WebP extended format (VP8X) stores 24-bit width/height minus one.
+    if (buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP' && buffer.toString('ascii', 12, 16) === 'VP8X') {
+      return { width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };
+    }
+  } catch {
+    // Unreadable/unsupported images remain explicitly dimensionless.
+  }
+  return { width: 0, height: 0 };
 }
-
 function buildCompressedImage(sourcePath, outputDir) {
   if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
     return {
