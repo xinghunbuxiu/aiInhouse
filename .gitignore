@@ -1,0 +1,70 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+# Build files
+build/
+out/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+floorplan-ml/data/
+floorplan-ml/runs/
+*.tmp
+*.temp
+.cache/
+.waylog/
+
+# Local crawled/private data
+downloads/
+backend/uploads/floorplans/
+.kujiale-headers.json
+.kujiale-curl.txt
+.kjlconfig.json
+scripts/kujiale-3d.config.json
+
+# Build / large artifacts - do not push to GitHub
+src-tauri/target/
+release/
+backend/uploads/
+backend/data/
+desktop-worker/workspace/
+codex-worker/test-output/
+codex-worker/verify-output/
+floorplan-ml/__pycache__/
+floorplan-ml/checkpoints/
+floorplan-ml/data/
+floorplan-ml/runs/
+**/__pycache__/
+*.pyc
+*.dmg
+.env
+backend/.env
+codex-worker/.env
+desktop-worker/.env

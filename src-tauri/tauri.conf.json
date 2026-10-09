@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AIInHouse",
+  "version": "0.1.0",
+  "identifier": "com.aiinhouse.desktop",
+  "build": {
+    "beforeDevCommand": "VITE_API_BASE_URL=http://127.0.0.1:3002/api npm run dev -- --host 127.0.0.1 --port 5174",
+    "devUrl": "http://127.0.0.1:5174",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AIInHouse 桌面版",
+        "width": 1480,
+        "height": 960,
+        "minWidth": 1180,
+        "minHeight": 760,
+        "backgroundColor": "#0f172a"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "resources": [
+      "../backend",
+      "../desktop-worker",
+      "../codex-worker"
+    ]
+  }
+}

@@ -1,0 +1,3950 @@
+{
+  "version": "1.3.1",
+  "title": "平面图制图标准识别资产",
+  "description": "面向户型平面图识别的图元本体。依据建筑制图惯例（参考 GB/T 50001、GB/T 50104 及售楼/精装示意图画法）整理墙、柱、门窗、栏杆、交通、管井、洁具、家电、家具与标注等图元，供预处理 scanner、语义门禁与前端图例浏览共用。",
+  "standardRefs": [
+    {
+      "id": "GB/T 50001",
+      "name": "房屋建筑制图统一标准",
+      "note": "线型、图线宽度、图例通用约定"
+    },
+    {
+      "id": "GB/T 50104",
+      "name": "建筑制图标准",
+      "note": "建筑专业平面图常用符号"
+    },
+    {
+      "id": "industry-sales-plan",
+      "name": "售楼/精装示意图惯例",
+      "note": "非严格国标但市场常见的变体画法，需做兼容映射"
+    }
+  ],
+  "categories": [
+    {
+      "id": "wall",
+      "name": "墙体",
+      "layer": "structural",
+      "parseOrder": 10,
+      "description": "外墙、内墙、承重墙、隔墙等结构与分隔图元"
+    },
+    {
+      "id": "column",
+      "name": "柱与剪力墙",
+      "layer": "structural",
+      "parseOrder": 15,
+      "description": "结构柱、剪力墙等竖向承重构件"
+    },
+    {
+      "id": "opening",
+      "name": "门窗洞口",
+      "layer": "openings",
+      "parseOrder": 20,
+      "description": "门、窗、推拉门、凸窗等墙体开洞"
+    },
+    {
+      "id": "circulation",
+      "name": "交通核",
+      "layer": "spaces",
+      "parseOrder": 30,
+      "description": "楼梯、电梯等垂直交通"
+    },
+    {
+      "id": "shaft",
+      "name": "管井烟道",
+      "layer": "spaces",
+      "parseOrder": 35,
+      "description": "烟道、管井、设备井"
+    },
+    {
+      "id": "fixture",
+      "name": "洁具厨电",
+      "layer": "symbols",
+      "parseOrder": 40,
+      "description": "卫浴洁具与厨房设备图例，用于空间语义"
+    },
+    {
+      "id": "furniture",
+      "name": "家具图例",
+      "layer": "symbols",
+      "parseOrder": 50,
+      "description": "床、沙发、桌椅等布置图例，不参与墙体建模"
+    },
+    {
+      "id": "outdoor",
+      "name": "阳台露台",
+      "layer": "spaces",
+      "parseOrder": 25,
+      "description": "阳台、露台边界（常虚线或细线）"
+    },
+    {
+      "id": "annotation",
+      "name": "标注尺寸",
+      "layer": "evidence",
+      "parseOrder": 5,
+      "description": "尺寸线、文字、指北针等，识别时需排除或仅作证据"
+    },
+    {
+      "id": "railing",
+      "name": "栏杆护栏",
+      "layer": "structural",
+      "parseOrder": 22,
+      "description": "阳台栏杆、室内护栏、矮墙等，不可当承重墙"
+    },
+    {
+      "id": "appliance",
+      "name": "家电设备",
+      "layer": "symbols",
+      "parseOrder": 45,
+      "description": "冰箱、洗衣机、热水器等设备图例，用于空间语义"
+    },
+    {
+      "id": "electrical",
+      "name": "电气点位",
+      "layer": "symbols",
+      "parseOrder": 55,
+      "description": "强弱电、开关、灯具等精装电气图例"
+    },
+    {
+      "id": "mep",
+      "name": "暖通地暖",
+      "layer": "symbols",
+      "parseOrder": 52,
+      "description": "地暖、散热、新风等机电图例"
+    }
+  ],
+  "parsePipeline": [
+    "annotation",
+    "wall",
+    "column",
+    "opening",
+    "railing",
+    "outdoor",
+    "circulation",
+    "shaft",
+    "fixture",
+    "appliance",
+    "mep",
+    "electrical",
+    "furniture"
+  ],
+  "symbols": [
+    {
+      "id": "wall-exterior",
+      "name": "外墙",
+      "category": "wall",
+      "aliases": [
+        "外围护墙",
+        "外轮廓墙"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "GB/T 50001"
+      ],
+      "modelRole": "exterior_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 100,
+      "drawingRules": {
+        "lineStyle": "solid-filled-or-double",
+        "relativeThickness": "thick",
+        "fill": "solid-or-hatch",
+        "commonVariants": [
+          "filled-band",
+          "double-parallel-thick"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "deep-black",
+          "thick-band",
+          "forms-outer-envelope"
+        ],
+        "geometryPriors": [
+          "near-plan-envelope",
+          "long-continuous-axis"
+        ],
+        "rejectIf": [
+          "dimension-ticks",
+          "light-gray-guide"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "外墙进入 3D 外轮廓与保温/外立面工序；厚度通常大于内隔墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"8\" y=\"22\" width=\"104\" height=\"20\" fill=\"#111827\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">外墙</text></svg>"
+    },
+    {
+      "id": "wall-load-bearing",
+      "name": "承重墙",
+      "category": "wall",
+      "aliases": [
+        "结构墙",
+        "厚墙",
+        "剪力墙段"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "structural_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 95,
+      "drawingRules": {
+        "lineStyle": "solid-filled",
+        "relativeThickness": "very-thick",
+        "fill": "solid-black",
+        "commonVariants": [
+          "filled-band",
+          "black-solid"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "very-deep-black",
+          "thicker-than-partition",
+          "continuous-through-rooms"
+        ],
+        "geometryPriors": [
+          "thickness-above-peer-median",
+          "high-very-dark-ratio"
+        ],
+        "rejectIf": [
+          "furniture-outline",
+          "dimension-chain"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "装修拆改门禁：默认不可拆除；需人工确认后才允许开洞改造。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"10\" y=\"18\" width=\"100\" height=\"28\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">承重墙</text></svg>"
+    },
+    {
+      "id": "wall-partition",
+      "name": "隔墙",
+      "category": "wall",
+      "aliases": [
+        "内隔墙",
+        "轻质隔墙",
+        "非承重墙"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "interior_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 90,
+      "drawingRules": {
+        "lineStyle": "solid-or-double-thin",
+        "relativeThickness": "thin-to-medium",
+        "fill": "none-or-light",
+        "commonVariants": [
+          "single-thin",
+          "double-parallel-thin"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thinner-than-exterior",
+          "medium-dark",
+          "room-divider"
+        ],
+        "geometryPriors": [
+          "connects-two-rooms",
+          "shorter-spans-ok"
+        ],
+        "rejectIf": [
+          "window-parallel-lines",
+          "dimension-ticks"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "可参与拆改方案；需与承重墙区分后再进入装修工序。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"12\" y=\"26\" width=\"96\" height=\"10\" fill=\"#334155\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">隔墙</text></svg>"
+    },
+    {
+      "id": "wall-interior",
+      "name": "内墙",
+      "category": "wall",
+      "aliases": [
+        "室内墙",
+        "户内墙"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "interior_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 85,
+      "drawingRules": {
+        "lineStyle": "solid",
+        "relativeThickness": "medium",
+        "fill": "solid-or-none",
+        "commonVariants": [
+          "filled-medium",
+          "double-line"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "inside-envelope",
+          "not-outermost"
+        ],
+        "geometryPriors": [
+          "inside-structural-envelope"
+        ],
+        "rejectIf": [
+          "outermost-envelope-only"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "默认室内墙体；厚度与角色需结合外轮廓判定。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"14\" y=\"24\" width=\"92\" height=\"14\" fill=\"#1e293b\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">内墙</text></svg>"
+    },
+    {
+      "id": "column-rect",
+      "name": "矩形柱",
+      "category": "column",
+      "aliases": [
+        "结构柱",
+        "方柱"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "column",
+      "outputField": "columns",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 88,
+      "drawingRules": {
+        "lineStyle": "solid-filled",
+        "relativeThickness": "compact-block",
+        "fill": "solid-black",
+        "commonVariants": [
+          "filled-rectangle",
+          "hatched-rectangle"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "compact-black-block",
+          "aspect-near-square"
+        ],
+        "geometryPriors": [
+          "area-small",
+          "not-elongated-wall"
+        ],
+        "rejectIf": [
+          "long-wall-band",
+          "furniture-rect"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "不可拆除构件；3D 中挤出为柱体。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"46\" y=\"14\" width=\"28\" height=\"28\" fill=\"#0f172a\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">柱</text></svg>"
+    },
+    {
+      "id": "door-single-swing",
+      "name": "平开门",
+      "category": "opening",
+      "aliases": [
+        "单扇门",
+        "内开门",
+        "外开门"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 100,
+      "drawingRules": {
+        "lineStyle": "door-leaf-plus-swing-arc",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "quarter-arc",
+          "leaf-line-with-arc"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wall-gap",
+          "radial-arc",
+          "leaf-line"
+        ],
+        "geometryPriors": [
+          "attached-to-wall",
+          "arc-radius-matches-leaf"
+        ],
+        "rejectIf": [
+          "window-parallel-lines",
+          "isolated-furniture"
+        ],
+        "confidenceBoost": 0.14
+      },
+      "commercialNotes": "正式开洞需贴墙；候选项不得自动商用放行。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M28 48 H92\" stroke=\"#94a3b8\" stroke-width=\"6\"/><path d=\"M40 48 V18\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M40 48 A28 28 0 0 1 68 20\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">平开门</text></svg>"
+    },
+    {
+      "id": "door-double-swing",
+      "name": "双扇平开门",
+      "category": "opening",
+      "aliases": [
+        "对开门",
+        "双开门"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 92,
+      "drawingRules": {
+        "lineStyle": "two-leaves-plus-arcs",
+        "relativeThickness": "wide-opening",
+        "fill": "none",
+        "commonVariants": [
+          "mirrored-arcs"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wide-wall-gap",
+          "two-arcs"
+        ],
+        "geometryPriors": [
+          "opening-width-large",
+          "symmetric-leaves"
+        ],
+        "rejectIf": [
+          "single-arc-only-as-window"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "常见于客厅/阳台过道；宽度通常大于单扇门。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 48 H100\" stroke=\"#94a3b8\" stroke-width=\"6\"/><path d=\"M40 48 V20\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M80 48 V20\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M40 48 A20 20 0 0 1 60 28\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M80 48 A20 20 0 0 0 60 28\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">双开门</text></svg>"
+    },
+    {
+      "id": "door-sliding",
+      "name": "推拉门",
+      "category": "opening",
+      "aliases": [
+        "移门",
+        "滑动门"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 90,
+      "drawingRules": {
+        "lineStyle": "parallel-leaf-in-wall-gap",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "two-panel-slide",
+          "three-panel-slide"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wall-gap",
+          "parallel-short-segments",
+          "no-swing-arc"
+        ],
+        "geometryPriors": [
+          "on-interior-or-balcony-wall"
+        ],
+        "rejectIf": [
+          "quarter-arc-present"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "阳台/厨房常见；勿与窗平行线混淆。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 32 H102\" stroke=\"#94a3b8\" stroke-width=\"8\"/><rect x=\"34\" y=\"24\" width=\"24\" height=\"16\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"62\" y=\"24\" width=\"24\" height=\"16\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">推拉门</text></svg>"
+    },
+    {
+      "id": "window-standard",
+      "name": "普通窗",
+      "category": "opening",
+      "aliases": [
+        "外窗",
+        "窗洞",
+        "三线窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 100,
+      "drawingRules": {
+        "lineStyle": "parallel-thin-lines-in-wall",
+        "relativeThickness": "wall-band-width",
+        "fill": "none",
+        "commonVariants": [
+          "two-parallel",
+          "three-parallel"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "parallel-thin-lines",
+          "on-exterior-wall"
+        ],
+        "geometryPriors": [
+          "near-exterior-envelope",
+          "strong-wall-support"
+        ],
+        "rejectIf": [
+          "interior-isolated",
+          "dimension-chain"
+        ],
+        "confidenceBoost": 0.14
+      },
+      "commercialNotes": "必须贴外墙或强墙证据；孤立窗图例不得自动开洞。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M16 32 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">窗</text></svg>"
+    },
+    {
+      "id": "window-bay",
+      "name": "凸窗",
+      "category": "opening",
+      "aliases": [
+        "飘窗",
+        "凸出窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "bay_window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 94,
+      "drawingRules": {
+        "lineStyle": "exterior-box-with-return",
+        "relativeThickness": "thin-to-medium",
+        "fill": "none",
+        "commonVariants": [
+          "rectangular-bay",
+          "trapezoid-bay"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "outward-box",
+          "return-side-walls",
+          "outer-glazing-lines"
+        ],
+        "geometryPriors": [
+          "protrudes-beyond-envelope"
+        ],
+        "rejectIf": [
+          "balcony-dashed-only"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "凸窗计入外轮廓；侧墙与玻璃面需分别建模。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 40 H100\" stroke=\"#94a3b8\" stroke-width=\"4\"/><path d=\"M36 40 V18 H84 V40\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M40 24 H80\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M40 30 H80\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">凸窗</text></svg>"
+    },
+    {
+      "id": "window-french",
+      "name": "落地窗",
+      "category": "opening",
+      "aliases": [
+        "落地玻璃",
+        "全高窗"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 88,
+      "drawingRules": {
+        "lineStyle": "tall-parallel-or-glass-wall",
+        "relativeThickness": "wall-band-width",
+        "fill": "none",
+        "commonVariants": [
+          "floor-to-ceiling-parallel"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-exterior-glazing",
+          "few-mullions"
+        ],
+        "geometryPriors": [
+          "living-or-balcony-edge"
+        ],
+        "rejectIf": [
+          "small-bathroom-window-size"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "客厅/阳台常见；按窗洞进入 3D，勿当普通隔墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M28 12 V52\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M40 12 V52\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M52 12 V52\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M64 12 V52\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M76 12 V52\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M88 12 V52\" stroke=\"#0f172a\" stroke-width=\"3\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">落地窗</text></svg>"
+    },
+    {
+      "id": "balcony-outline",
+      "name": "阳台",
+      "category": "outdoor",
+      "aliases": [
+        "露台",
+        "生活阳台",
+        "服务阳台"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "balcony",
+      "outputField": "rooms",
+      "scannerIds": [
+        "room-void-scanner"
+      ],
+      "priority": 90,
+      "drawingRules": {
+        "lineStyle": "dashed-or-thin-exterior",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "dashed-boundary",
+          "thin-solid-protrusion"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "protruding-space",
+          "dashed-edge",
+          "ocr-阳台"
+        ],
+        "geometryPriors": [
+          "outside-main-envelope-or-edge"
+        ],
+        "rejectIf": [
+          "treated-as-bedroom"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "空间类型 balcony；与凸窗区分。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"24\" y=\"16\" width=\"72\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\" stroke-dasharray=\"4 3\" fill=\"#f8fafc\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">阳台</text></svg>"
+    },
+    {
+      "id": "stairs-straight",
+      "name": "直行楼梯",
+      "category": "circulation",
+      "aliases": [
+        "楼梯",
+        "梯段"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stairs",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "parallel-treads-with-arrow",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "straight-flight",
+          "with-direction-arrow"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "parallel-treads",
+          "direction-arrow"
+        ],
+        "geometryPriors": [
+          "compact-rectangular-zone"
+        ],
+        "rejectIf": [
+          "bed-aspect-without-treads"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "复式/叠加户型关键；勿当作普通房间家具。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M28 48 H92\" stroke=\"#0f172a\"/><path d=\"M28 40 H84\" stroke=\"#0f172a\"/><path d=\"M28 32 H76\" stroke=\"#0f172a\"/><path d=\"M28 24 H68\" stroke=\"#0f172a\"/><path d=\"M28 16 H60\" stroke=\"#0f172a\"/><path d=\"M96 44 L104 36 L96 28\" stroke=\"#0f172a\" fill=\"none\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">楼梯</text></svg>"
+    },
+    {
+      "id": "elevator-shaft",
+      "name": "电梯井",
+      "category": "circulation",
+      "aliases": [
+        "电梯",
+        "轿厢井"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "elevator",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "boxed-with-diagonal-or-cabin",
+        "relativeThickness": "compact-block",
+        "fill": "none-or-light",
+        "commonVariants": [
+          "square-with-X",
+          "cabin-rectangle"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "square-shaft",
+          "crossing-diagonals"
+        ],
+        "geometryPriors": [
+          "near-entry-or-public-core"
+        ],
+        "rejectIf": [
+          "bathroom-fixture-set"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "公共核；住宅户型图较少出现在户内。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"12\" width=\"40\" height=\"36\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M40 12 L80 48 M80 12 L40 48\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">电梯</text></svg>"
+    },
+    {
+      "id": "shaft-flue",
+      "name": "烟道",
+      "category": "shaft",
+      "aliases": [
+        "排烟井",
+        "烟道井"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "flue",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 75,
+      "drawingRules": {
+        "lineStyle": "small-filled-or-labeled-box",
+        "relativeThickness": "compact",
+        "fill": "solid-or-hatch",
+        "commonVariants": [
+          "small-black-square",
+          "labeled-烟"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-dark-block",
+          "near-kitchen"
+        ],
+        "geometryPriors": [
+          "kitchen-adjacent"
+        ],
+        "rejectIf": [
+          "column-large"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "厨房语义证据；不可当可拆隔墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"48\" y=\"16\" width=\"24\" height=\"24\" fill=\"#0f172a\"/><text x=\"60\" y=\"56\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">烟道</text></svg>"
+    },
+    {
+      "id": "shaft-pipe",
+      "name": "管井",
+      "category": "shaft",
+      "aliases": [
+        "管道井",
+        "设备井"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "pipe_shaft",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 74,
+      "drawingRules": {
+        "lineStyle": "small-box-with-label",
+        "relativeThickness": "compact",
+        "fill": "none-or-hatch",
+        "commonVariants": [
+          "labeled-管井"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-shaft-box",
+          "near-bathroom-or-kitchen"
+        ],
+        "geometryPriors": [
+          "wet-area-adjacent"
+        ],
+        "rejectIf": [
+          "furniture-large"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "湿区语义证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"44\" y=\"14\" width=\"32\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#e2e8f0\"/><circle cx=\"54\" cy=\"28\" r=\"3\" fill=\"#0f172a\"/><circle cx=\"66\" cy=\"28\" r=\"3\" fill=\"#0f172a\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">管井</text></svg>"
+    },
+    {
+      "id": "fixture-toilet",
+      "name": "马桶",
+      "category": "fixture",
+      "aliases": [
+        "坐便器",
+        "恭桶"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "bath_fixture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 86,
+      "drawingRules": {
+        "lineStyle": "oval-or-elongated-fixture",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "top-view-toilet"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "narrow-fixture",
+          "bathroom-cluster"
+        ],
+        "geometryPriors": [
+          "in-bathroom-room"
+        ],
+        "rejectIf": [
+          "outside-wet-area-without-label"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "强卫生间语义证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"48\" y=\"12\" width=\"24\" height=\"14\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><ellipse cx=\"60\" cy=\"38\" rx=\"14\" ry=\"12\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">马桶</text></svg>"
+    },
+    {
+      "id": "fixture-sink",
+      "name": "洗手盆",
+      "category": "fixture",
+      "aliases": [
+        "台盆",
+        "洗脸盆"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "bath_fixture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 82,
+      "drawingRules": {
+        "lineStyle": "oval-on-counter",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "countertop-basin"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "compact-oval",
+          "against-wall"
+        ],
+        "geometryPriors": [
+          "bathroom-or-kitchen"
+        ],
+        "rejectIf": [
+          "dining-table-large"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "卫/厨语义辅助。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"22\" width=\"60\" height=\"20\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><ellipse cx=\"60\" cy=\"32\" rx=\"14\" ry=\"8\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">洗手盆</text></svg>"
+    },
+    {
+      "id": "fixture-bathtub",
+      "name": "浴缸",
+      "category": "fixture",
+      "aliases": [
+        "浴盆"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "bath_fixture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "rounded-rectangle",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "rounded-rect-tub"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "large-bathroom-rect",
+          "rounded-corners"
+        ],
+        "geometryPriors": [
+          "bathroom-room"
+        ],
+        "rejectIf": [
+          "bed-in-bedroom"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "卫生间语义；尺寸大于洗手盆。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"24\" y=\"18\" width=\"72\" height=\"28\" rx=\"10\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">浴缸</text></svg>"
+    },
+    {
+      "id": "fixture-stove",
+      "name": "灶台",
+      "category": "fixture",
+      "aliases": [
+        "燃气灶",
+        "炉灶"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 84,
+      "drawingRules": {
+        "lineStyle": "counter-with-burners",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "two-burner",
+          "four-burner"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "kitchen-counter-circles",
+          "near-flue"
+        ],
+        "geometryPriors": [
+          "kitchen-room"
+        ],
+        "rejectIf": [
+          "bathroom-cluster"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "强厨房语义证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"28\" y=\"18\" width=\"64\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><circle cx=\"48\" cy=\"32\" r=\"6\" stroke=\"#0f172a\"/><circle cx=\"72\" cy=\"32\" r=\"6\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">灶台</text></svg>"
+    },
+    {
+      "id": "furniture-bed",
+      "name": "床",
+      "category": "furniture",
+      "aliases": [
+        "双人床",
+        "单人床"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "large-bedroom-rectangle",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "rect-with-pillow"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "large-aspect-1.3-2.9",
+          "bedroom-zone"
+        ],
+        "geometryPriors": [
+          "in-bedroom-candidate"
+        ],
+        "rejectIf": [
+          "wet-area"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "卧室语义；不进入墙体模型。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"22\" y=\"14\" width=\"76\" height=\"36\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"28\" y=\"18\" width=\"20\" height=\"12\" stroke=\"#0f172a\" fill=\"#e2e8f0\"/><text x=\"60\" y=\"62\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">床</text></svg>"
+    },
+    {
+      "id": "furniture-sofa",
+      "name": "沙发",
+      "category": "furniture",
+      "aliases": [
+        "沙发组合",
+        "三人沙发"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 68,
+      "drawingRules": {
+        "lineStyle": "long-furniture-outline",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "L-sofa",
+          "straight-sofa"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-hollow-rect",
+          "living-zone"
+        ],
+        "geometryPriors": [
+          "in-living-candidate"
+        ],
+        "rejectIf": [
+          "filled-as-wall"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "客厅语义辅助。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 40 H100 V28 H88 V18 H32 V28 H20 Z\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">沙发</text></svg>"
+    },
+    {
+      "id": "furniture-table",
+      "name": "桌",
+      "category": "furniture",
+      "aliases": [
+        "餐桌",
+        "茶几",
+        "书桌"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "compact-square-or-rect",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "square-table",
+          "rect-dining"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "compact-square-symbol",
+          "low-fill"
+        ],
+        "geometryPriors": [
+          "room-center-or-dining"
+        ],
+        "rejectIf": [
+          "column-solid-fill"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "弱语义；需结合房间类型。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"16\" width=\"40\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">桌</text></svg>"
+    },
+    {
+      "id": "annotation-dimension",
+      "name": "尺寸标注",
+      "category": "annotation",
+      "aliases": [
+        "尺寸线",
+        "标注线",
+        "轴号尺寸"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 100,
+      "drawingRules": {
+        "lineStyle": "thin-with-ticks",
+        "relativeThickness": "very-thin",
+        "fill": "none",
+        "commonVariants": [
+          "dimension-chain",
+          "extension-line-with-text"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "light-thin-line",
+          "short-tick-intersections",
+          "nearby-numbers"
+        ],
+        "geometryPriors": [
+          "margin-or-outside-rooms"
+        ],
+        "rejectIf": [],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "必须排除出墙体；可保留为比例尺证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 32 H104\" stroke=\"#64748b\" stroke-width=\"1\"/><path d=\"M16 26 V38 M104 26 V38\" stroke=\"#64748b\" stroke-width=\"1\"/><path d=\"M40 28 V36 M70 28 V36\" stroke=\"#64748b\" stroke-width=\"1\"/><text x=\"60\" y=\"24\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">3600</text><text x=\"60\" y=\"56\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">尺寸线</text></svg>"
+    },
+    {
+      "id": "annotation-room-label",
+      "name": "房间文字",
+      "category": "annotation",
+      "aliases": [
+        "房间名",
+        "功能标注"
+      ],
+      "standardRefs": [
+        "GB/T 50001",
+        "industry-sales-plan"
+      ],
+      "modelRole": "text_label",
+      "outputField": "textLabels",
+      "scannerIds": [
+        "ocr-label-scanner"
+      ],
+      "priority": 95,
+      "drawingRules": {
+        "lineStyle": "text",
+        "relativeThickness": "n/a",
+        "fill": "n/a",
+        "commonVariants": [
+          "客厅",
+          "主卧",
+          "厨房",
+          "卫生间",
+          "阳台"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "ocr-text",
+          "inside-room-cell"
+        ],
+        "geometryPriors": [
+          "center-of-void"
+        ],
+        "rejectIf": [
+          "margin-title-block-only"
+        ],
+        "confidenceBoost": 0.16
+      },
+      "commercialNotes": "语义校正主证据；边界仍以墙线为准。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"20\" y=\"14\" width=\"80\" height=\"30\" stroke=\"#cbd5e1\" stroke-dasharray=\"3 2\" fill=\"#f8fafc\"/><text x=\"60\" y=\"34\" text-anchor=\"middle\" font-size=\"14\" fill=\"#0f172a\" font-family=\"sans-serif\">客厅</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">房间文字</text></svg>"
+    },
+    {
+      "id": "annotation-north",
+      "name": "指北针",
+      "category": "annotation",
+      "aliases": [
+        "北向",
+        "方位标"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 50,
+      "drawingRules": {
+        "lineStyle": "arrow-N",
+        "relativeThickness": "symbol",
+        "fill": "mixed",
+        "commonVariants": [
+          "circle-with-N",
+          "triangle-north"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "N-mark",
+          "corner-margin"
+        ],
+        "geometryPriors": [
+          "drawing-margin"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "仅朝向证据，不进墙体。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"60\" cy=\"28\" r=\"16\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M60 14 L66 30 L60 26 L54 30 Z\" fill=\"#0f172a\"/><text x=\"60\" y=\"34\" text-anchor=\"middle\" font-size=\"8\" fill=\"#0f172a\">N</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">指北针</text></svg>"
+    },
+    {
+      "id": "wall-curtain",
+      "name": "幕墙/玻璃外墙",
+      "category": "wall",
+      "aliases": [
+        "玻璃幕墙",
+        "落地玻璃墙"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "curtain_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner",
+        "window-symbol-scanner"
+      ],
+      "priority": 82,
+      "drawingRules": {
+        "lineStyle": "thin-parallel-or-glass-mullion",
+        "relativeThickness": "thin-to-medium",
+        "fill": "none",
+        "commonVariants": [
+          "mullion-grid",
+          "floor-to-ceiling-glass"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-exterior-glazing",
+          "repeated-mullions"
+        ],
+        "geometryPriors": [
+          "on-outer-envelope",
+          "living-or-showroom-edge"
+        ],
+        "rejectIf": [
+          "solid-filled-thick-wall"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "外立面玻璃墙按窗洞/幕墙建模，勿当厚承重墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 16 V48 M32 16 V48 M48 16 V48 M64 16 V48 M80 16 V48 M96 16 V48\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M12 16 H104 M12 48 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">幕墙</text></svg>"
+    },
+    {
+      "id": "wall-glass-partition",
+      "name": "玻璃隔断",
+      "category": "wall",
+      "aliases": [
+        "玻璃隔墙",
+        "半透明隔断"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "glass_partition",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "double-thin-or-dashed",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "double-glass-line",
+          "dashed-partition"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-double-line",
+          "interior-divider"
+        ],
+        "geometryPriors": [
+          "inside-envelope",
+          "open-plan-divider"
+        ],
+        "rejectIf": [
+          "filled-black-band"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "可拆除轻质隔断；装修拆改优先候选。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 28 H100\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M20 36 H100\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">玻璃隔断</text></svg>"
+    },
+    {
+      "id": "wall-demolished",
+      "name": "拟拆除墙",
+      "category": "wall",
+      "aliases": [
+        "拆除墙",
+        "虚线墙",
+        "改造墙"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "demolished_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner",
+        "annotation-dimension-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "dashed-or-crossed-out",
+        "relativeThickness": "medium",
+        "fill": "none",
+        "commonVariants": [
+          "dashed-band",
+          "cross-hatch-demolish"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "dashed-wall",
+          "demolish-mark"
+        ],
+        "geometryPriors": [
+          "interior",
+          "renovation-drawing"
+        ],
+        "rejectIf": [
+          "solid-load-bearing"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "改造图专用；默认不进入承重结构，需人工确认后拆除。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 32 H104\" stroke=\"#0f172a\" stroke-width=\"3\" stroke-dasharray=\"6 4\"/><path d=\"M40 22 L80 42 M80 22 L40 42\" stroke=\"#b91c1c\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">拟拆除</text></svg>"
+    },
+    {
+      "id": "wall-half",
+      "name": "半墙/矮墙",
+      "category": "wall",
+      "aliases": [
+        "半高墙",
+        "隔断矮墙",
+        "吧台墙"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "half_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "solid-short-segment",
+        "relativeThickness": "medium",
+        "fill": "solid-or-none",
+        "commonVariants": [
+          "short-stub-wall",
+          "kitchen-bar-wall"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-wall-stub",
+          "open-end"
+        ],
+        "geometryPriors": [
+          "kitchen-living-boundary"
+        ],
+        "rejectIf": [
+          "full-span-load-bearing"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "半墙高度低于普通墙，3D 挤出高度需单独配置。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"36\" y=\"24\" width=\"48\" height=\"14\" fill=\"#334155\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">半墙</text></svg>"
+    },
+    {
+      "id": "column-round",
+      "name": "圆形柱",
+      "category": "column",
+      "aliases": [
+        "圆柱",
+        "圆截面柱"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "column",
+      "outputField": "columns",
+      "scannerIds": [
+        "structural-wall-scanner",
+        "furniture-fixture-scanner"
+      ],
+      "priority": 86,
+      "drawingRules": {
+        "lineStyle": "filled-circle",
+        "relativeThickness": "compact-block",
+        "fill": "solid-black",
+        "commonVariants": [
+          "solid-circle",
+          "hatched-circle"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "circular-black-block",
+          "near-square-bbox"
+        ],
+        "geometryPriors": [
+          "compact-area",
+          "not-elongated"
+        ],
+        "rejectIf": [
+          "long-wall-band",
+          "furniture-outline"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "不可拆除；3D 挤出为圆柱。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"60\" cy=\"28\" r=\"14\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">圆柱</text></svg>"
+    },
+    {
+      "id": "wall-shear",
+      "name": "剪力墙",
+      "category": "column",
+      "aliases": [
+        "剪力墙段",
+        "结构墙肢"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "shear_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 93,
+      "drawingRules": {
+        "lineStyle": "solid-filled-thick",
+        "relativeThickness": "very-thick",
+        "fill": "solid-black",
+        "commonVariants": [
+          "thick-filled-band",
+          "L-shaped-shear"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "very-thick-black",
+          "structural-axis"
+        ],
+        "geometryPriors": [
+          "thickness-above-peers",
+          "often-near-core"
+        ],
+        "rejectIf": [
+          "thin-partition"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "结构不可改；拆改门禁硬拦截。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"18\" y=\"20\" width=\"84\" height=\"20\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">剪力墙</text></svg>"
+    },
+    {
+      "id": "door-folding",
+      "name": "折叠门",
+      "category": "opening",
+      "aliases": [
+        "折门",
+        "多扇折叠门"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 86,
+      "drawingRules": {
+        "lineStyle": "zigzag-or-accordion-in-gap",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "accordion-fold",
+          "bi-fold"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "zigzag-leaf",
+          "wall-gap",
+          "no-full-swing-arc"
+        ],
+        "geometryPriors": [
+          "wide-opening",
+          "closet-or-partition"
+        ],
+        "rejectIf": [
+          "quarter-arc-single-leaf"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "衣柜/阳台过道常见；开洞宽度通常较大。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 32 H102\" stroke=\"#94a3b8\" stroke-width=\"8\"/><path d=\"M34 24 L46 40 L58 24 L70 40 L82 24\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">折叠门</text></svg>"
+    },
+    {
+      "id": "door-pocket",
+      "name": "暗藏/推拉入墙门",
+      "category": "opening",
+      "aliases": [
+        "口袋门",
+        "入墙移门"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 84,
+      "drawingRules": {
+        "lineStyle": "wall-pocket-with-sliding-leaf",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "single-pocket",
+          "double-pocket"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wall-cavity",
+          "sliding-leaf-in-wall"
+        ],
+        "geometryPriors": [
+          "interior-partition"
+        ],
+        "rejectIf": [
+          "swing-arc-present"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "墙体厚度需含门洞腔体；勿与普通推拉门混淆。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 32 H100\" stroke=\"#94a3b8\" stroke-width=\"10\"/><rect x=\"28\" y=\"24\" width=\"18\" height=\"16\" fill=\"#cbd5e1\" stroke=\"#0f172a\"/><rect x=\"52\" y=\"24\" width=\"28\" height=\"16\" stroke=\"#0f172a\" fill=\"#fff\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">暗藏门</text></svg>"
+    },
+    {
+      "id": "door-entrance",
+      "name": "入户门",
+      "category": "opening",
+      "aliases": [
+        "户门",
+        "防盗门",
+        "大门"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "entrance_door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 98,
+      "drawingRules": {
+        "lineStyle": "door-leaf-plus-arc-on-entry",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "single-entry",
+          "double-entry"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "entry-room-exterior-door",
+          "larger-leaf"
+        ],
+        "geometryPriors": [
+          "entry-or-foyer",
+          "near-exterior-or-public-corridor"
+        ],
+        "rejectIf": [
+          "bathroom-door-size-only"
+        ],
+        "confidenceBoost": 0.14
+      },
+      "commercialNotes": "入户门是漫游起点与安防语义关键节点。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 48 H96\" stroke=\"#94a3b8\" stroke-width=\"8\"/><path d=\"M40 48 V14\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M40 48 A30 30 0 0 1 70 18\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">入户门</text></svg>"
+    },
+    {
+      "id": "window-sliding",
+      "name": "推拉窗",
+      "category": "opening",
+      "aliases": [
+        "滑动窗",
+        "左右推拉窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 92,
+      "drawingRules": {
+        "lineStyle": "parallel-lines-with-sash-overlap",
+        "relativeThickness": "wall-band-width",
+        "fill": "none",
+        "commonVariants": [
+          "two-sash-slide",
+          "three-sash-slide"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "parallel-thin-lines",
+          "sash-overlap-mark"
+        ],
+        "geometryPriors": [
+          "on-exterior-wall"
+        ],
+        "rejectIf": [
+          "interior-isolated"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "住宅外窗最常见画法之一。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M28 28 H58\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M52 32 H88\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">推拉窗</text></svg>"
+    },
+    {
+      "id": "window-casement",
+      "name": "平开窗",
+      "category": "opening",
+      "aliases": [
+        "外开窗",
+        "内开窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 90,
+      "drawingRules": {
+        "lineStyle": "parallel-lines-with-opening-tick",
+        "relativeThickness": "wall-band-width",
+        "fill": "none",
+        "commonVariants": [
+          "single-casement",
+          "double-casement"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "parallel-thin-lines",
+          "small-opening-tick"
+        ],
+        "geometryPriors": [
+          "on-exterior-wall"
+        ],
+        "rejectIf": [
+          "door-swing-arc"
+        ],
+        "confidenceBoost": 0.09
+      },
+      "commercialNotes": "厨房/卫生间小窗常见。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M16 32 H104\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M60 24 L72 32 L60 40\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">平开窗</text></svg>"
+    },
+    {
+      "id": "window-high",
+      "name": "高窗",
+      "category": "opening",
+      "aliases": [
+        "高位窗",
+        "亮子"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "short-parallel-on-wall",
+        "relativeThickness": "wall-band-width",
+        "fill": "none",
+        "commonVariants": [
+          "short-high-window"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-window-band",
+          "bathroom-or-stair"
+        ],
+        "geometryPriors": [
+          "wet-area-or-circulation"
+        ],
+        "rejectIf": [
+          "full-height-french"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "卫生间高窗；3D 窗台高度偏高。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M36 26 H84\" stroke=\"#0f172a\" stroke-width=\"2.5\"/><path d=\"M36 34 H84\" stroke=\"#0f172a\" stroke-width=\"2.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">高窗</text></svg>"
+    },
+    {
+      "id": "opening-pass-through",
+      "name": "门洞/垭口",
+      "category": "opening",
+      "aliases": [
+        "过道洞口",
+        "无门扇洞口",
+        "垭口"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "opening",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 88,
+      "drawingRules": {
+        "lineStyle": "wall-gap-no-leaf",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "plain-gap",
+          "archway"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wall-gap",
+          "no-leaf",
+          "no-arc"
+        ],
+        "geometryPriors": [
+          "between-rooms",
+          "entry-living"
+        ],
+        "rejectIf": [
+          "swing-arc",
+          "window-parallel-lines"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "无门扇开洞；3D 只开洞不建门扇。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 20 V44 M102 20 V44\" stroke=\"#94a3b8\" stroke-width=\"8\"/><path d=\"M26 32 H94\" stroke=\"#fff\" stroke-width=\"10\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">垭口</text></svg>"
+    },
+    {
+      "id": "railing-balcony",
+      "name": "阳台栏杆",
+      "category": "railing",
+      "aliases": [
+        "栏杆",
+        "护栏",
+        "玻璃栏板"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "railing",
+      "outputField": "symbols",
+      "scannerIds": [
+        "structural-wall-scanner",
+        "furniture-fixture-scanner"
+      ],
+      "priority": 85,
+      "drawingRules": {
+        "lineStyle": "thin-with-posts-or-dash",
+        "relativeThickness": "very-thin",
+        "fill": "none",
+        "commonVariants": [
+          "post-rail",
+          "glass-balustrade",
+          "dashed-edge"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-balcony-edge",
+          "vertical-posts"
+        ],
+        "geometryPriors": [
+          "balcony-perimeter"
+        ],
+        "rejectIf": [
+          "thick-structural-wall"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "不可当承重墙；3D 为栏杆构件。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M28 24 V40 M48 24 V40 M68 24 V40 M88 24 V40\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">栏杆</text></svg>"
+    },
+    {
+      "id": "railing-stair",
+      "name": "楼梯扶手",
+      "category": "railing",
+      "aliases": [
+        "楼梯栏杆",
+        "扶手"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stair_rail",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 76,
+      "drawingRules": {
+        "lineStyle": "line-along-stair-side",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "side-rail"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "alongside-stair-treads"
+        ],
+        "geometryPriors": [
+          "stair-zone"
+        ],
+        "rejectIf": [
+          "wall-band"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "随楼梯建模，不作房间边界。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 48 L96 16\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M28 48 L28 36 M52 36 L52 24 M76 24 L76 14\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">扶手</text></svg>"
+    },
+    {
+      "id": "terrace-outline",
+      "name": "露台",
+      "category": "outdoor",
+      "aliases": [
+        "大露台",
+        "空中花园"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "terrace",
+      "outputField": "rooms",
+      "scannerIds": [
+        "room-void-scanner"
+      ],
+      "priority": 86,
+      "drawingRules": {
+        "lineStyle": "dashed-or-thin-protrusion",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "large-dashed-zone"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "large-outdoor-void",
+          "ocr-露台"
+        ],
+        "geometryPriors": [
+          "outside-main-envelope"
+        ],
+        "rejectIf": [
+          "treated-as-living"
+        ],
+        "confidenceBoost": 0.09
+      },
+      "commercialNotes": "空间类型 terrace/balcony；面积常大于生活阳台。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"16\" y=\"12\" width=\"88\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" stroke-dasharray=\"5 3\" fill=\"#f8fafc\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">露台</text></svg>"
+    },
+    {
+      "id": "courtyard-outline",
+      "name": "天井/内院",
+      "category": "outdoor",
+      "aliases": [
+        "天井",
+        "内院",
+        "采光井"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "courtyard",
+      "outputField": "rooms",
+      "scannerIds": [
+        "room-void-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "inner-void-boundary",
+        "relativeThickness": "thin",
+        "fill": "none-or-hatch",
+        "commonVariants": [
+          "central-void"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "inner-open-void",
+          "surrounded-by-rooms"
+        ],
+        "geometryPriors": [
+          "inside-building-footprint"
+        ],
+        "rejectIf": [
+          "furniture-rect"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "非室内采暖空间；勿当房间面积。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"28\" y=\"12\" width=\"64\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#e2e8f0\"/><path d=\"M40 20 H80 M40 28 H80 M40 36 H80\" stroke=\"#94a3b8\" stroke-width=\"1\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">天井</text></svg>"
+    },
+    {
+      "id": "stairs-l-shape",
+      "name": "L 形楼梯",
+      "category": "circulation",
+      "aliases": [
+        "转角楼梯",
+        "双跑楼梯"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stairs",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 82,
+      "drawingRules": {
+        "lineStyle": "bent-treads-with-arrow",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "L-flight",
+          "U-flight"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "bent-parallel-treads",
+          "direction-arrow"
+        ],
+        "geometryPriors": [
+          "compact-corner-zone"
+        ],
+        "rejectIf": [
+          "furniture-bed"
+        ],
+        "confidenceBoost": 0.09
+      },
+      "commercialNotes": "复式常见；需识别转角平台。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 48 H64 V20 H96\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M24 40 H56 M24 32 H56 M64 20 V40\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><path d=\"M88 28 L100 20 L88 16\" stroke=\"#0f172a\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">L楼梯</text></svg>"
+    },
+    {
+      "id": "stairs-spiral",
+      "name": "螺旋楼梯",
+      "category": "circulation",
+      "aliases": [
+        "旋转楼梯",
+        "圆形楼梯"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stairs",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 74,
+      "drawingRules": {
+        "lineStyle": "radial-treads-in-circle",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "spiral-circle"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "circular-zone",
+          "radial-lines"
+        ],
+        "geometryPriors": [
+          "compact-round"
+        ],
+        "rejectIf": [
+          "round-table-only"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "别墅/复式点缀楼梯。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"60\" cy=\"28\" r=\"18\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M60 28 L78 28 M60 28 L72 16 M60 28 L72 40 M60 28 L48 16\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">螺旋梯</text></svg>"
+    },
+    {
+      "id": "shaft-water",
+      "name": "给排水井",
+      "category": "shaft",
+      "aliases": [
+        "水井",
+        "水管井"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "water_shaft",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 73,
+      "drawingRules": {
+        "lineStyle": "small-box-with-water-mark",
+        "relativeThickness": "compact",
+        "fill": "none-or-hatch",
+        "commonVariants": [
+          "labeled-水"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-shaft-box",
+          "wet-area"
+        ],
+        "geometryPriors": [
+          "bathroom-kitchen-adjacent"
+        ],
+        "rejectIf": [
+          "furniture-large"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "湿区语义证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"44\" y=\"12\" width=\"32\" height=\"30\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#e0f2fe\"/><path d=\"M52 22 Q60 30 68 22 Q60 36 52 22\" stroke=\"#0284c7\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">水井</text></svg>"
+    },
+    {
+      "id": "shaft-electrical",
+      "name": "强电/弱电井",
+      "category": "shaft",
+      "aliases": [
+        "电井",
+        "强电井",
+        "弱电井",
+        "电信井"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "electrical_shaft",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "small-box-with-lightning-or-label",
+        "relativeThickness": "compact",
+        "fill": "none",
+        "commonVariants": [
+          "labeled-电"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-shaft-box",
+          "near-entry-or-corridor"
+        ],
+        "geometryPriors": [
+          "public-core-or-entry"
+        ],
+        "rejectIf": [
+          "kitchen-flue"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "不可当可拆墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"44\" y=\"12\" width=\"32\" height=\"30\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fef9c3\"/><path d=\"M62 18 L54 30 H62 L58 40\" stroke=\"#ca8a04\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">电井</text></svg>"
+    },
+    {
+      "id": "fixture-shower",
+      "name": "淋浴间",
+      "category": "fixture",
+      "aliases": [
+        "花洒",
+        "淋浴房",
+        "淋浴区"
+      ],
+      "standardRefs": [
+        "GB/T 50104",
+        "industry-sales-plan"
+      ],
+      "modelRole": "bath_fixture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 84,
+      "drawingRules": {
+        "lineStyle": "square-with-drain-or-tray",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "shower-tray",
+          "glass-enclosure"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "bathroom-square",
+          "drain-mark"
+        ],
+        "geometryPriors": [
+          "bathroom-room"
+        ],
+        "rejectIf": [
+          "bedroom"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "强卫生间语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"36\" y=\"12\" width=\"48\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><circle cx=\"60\" cy=\"28\" r=\"4\" stroke=\"#0f172a\"/><path d=\"M60 16 V22\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">淋浴</text></svg>"
+    },
+    {
+      "id": "fixture-washer",
+      "name": "洗衣机",
+      "category": "fixture",
+      "aliases": [
+        "洗衣柜",
+        "干衣机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "square-with-circle-drum",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "top-view-washer"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "square-with-inner-circle",
+          "balcony-or-bath"
+        ],
+        "geometryPriors": [
+          "balcony-bathroom-kitchen"
+        ],
+        "rejectIf": [
+          "dining-table"
+        ],
+        "confidenceBoost": 0.09
+      },
+      "commercialNotes": "阳台/卫生间语义辅助。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"12\" width=\"40\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><circle cx=\"60\" cy=\"30\" r=\"10\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">洗衣机</text></svg>"
+    },
+    {
+      "id": "fixture-fridge",
+      "name": "冰箱",
+      "category": "appliance",
+      "aliases": [
+        "冷柜",
+        "双门冰箱"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 82,
+      "drawingRules": {
+        "lineStyle": "rect-with-door-split",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "two-door-fridge"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "tall-kitchen-rect",
+          "door-split-line"
+        ],
+        "geometryPriors": [
+          "kitchen-or-dining"
+        ],
+        "rejectIf": [
+          "bathroom-cluster"
+        ],
+        "confidenceBoost": 0.1
+      },
+      "commercialNotes": "厨房/餐厅语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"44\" y=\"10\" width=\"32\" height=\"38\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M44 28 H76\" stroke=\"#0f172a\"/><circle cx=\"70\" cy=\"20\" r=\"1.5\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">冰箱</text></svg>"
+    },
+    {
+      "id": "fixture-hood",
+      "name": "油烟机",
+      "category": "appliance",
+      "aliases": [
+        "抽油烟机",
+        "烟机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "hood-above-stove",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "wall-hood"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "above-stove",
+          "near-flue"
+        ],
+        "geometryPriors": [
+          "kitchen"
+        ],
+        "rejectIf": [
+          "bathroom"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "与灶台、烟道联合强化厨房判定。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M30 28 H90 L80 18 H40 Z\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"52\" y=\"28\" width=\"16\" height=\"10\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">烟机</text></svg>"
+    },
+    {
+      "id": "fixture-water-heater",
+      "name": "热水器",
+      "category": "appliance",
+      "aliases": [
+        "燃气热水器",
+        "电热水器"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 74,
+      "drawingRules": {
+        "lineStyle": "compact-wall-box",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "wall-mounted-heater"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-wall-box",
+          "kitchen-or-bath"
+        ],
+        "geometryPriors": [
+          "wet-area"
+        ],
+        "rejectIf": [
+          "large-furniture"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "弱语义，辅助湿区。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"46\" y=\"14\" width=\"28\" height=\"30\" rx=\"4\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">热水器</text></svg>"
+    },
+    {
+      "id": "furniture-wardrobe",
+      "name": "衣柜",
+      "category": "furniture",
+      "aliases": [
+        "衣橱",
+        "步入式衣柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "long-rect-against-wall",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "wall-wardrobe",
+          "walk-in"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-bedroom-rect",
+          "against-wall"
+        ],
+        "geometryPriors": [
+          "bedroom"
+        ],
+        "rejectIf": [
+          "wet-area"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "卧室语义；不进墙体。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"22\" y=\"16\" width=\"76\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M60 16 V44\" stroke=\"#0f172a\"/><circle cx=\"52\" cy=\"30\" r=\"1.5\" fill=\"#0f172a\"/><circle cx=\"68\" cy=\"30\" r=\"1.5\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">衣柜</text></svg>"
+    },
+    {
+      "id": "furniture-dining-set",
+      "name": "餐桌椅",
+      "category": "furniture",
+      "aliases": [
+        "餐桌组合",
+        "餐台"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 68,
+      "drawingRules": {
+        "lineStyle": "table-with-surrounding-chairs",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "rect-dining",
+          "round-dining"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "central-table",
+          "chair-notches"
+        ],
+        "geometryPriors": [
+          "dining-or-living"
+        ],
+        "rejectIf": [
+          "column-solid"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "餐厅语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"20\" width=\"40\" height=\"22\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"28\" y=\"24\" width=\"10\" height=\"14\" stroke=\"#0f172a\"/><rect x=\"82\" y=\"24\" width=\"10\" height=\"14\" stroke=\"#0f172a\"/><rect x=\"50\" y=\"10\" width=\"20\" height=\"8\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">餐桌椅</text></svg>"
+    },
+    {
+      "id": "furniture-tv-cabinet",
+      "name": "电视柜",
+      "category": "furniture",
+      "aliases": [
+        "影视墙柜",
+        "电视背景柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 66,
+      "drawingRules": {
+        "lineStyle": "long-low-cabinet",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "low-tv-console"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-low-rect",
+          "living-wall"
+        ],
+        "geometryPriors": [
+          "living"
+        ],
+        "rejectIf": [
+          "bed"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "客厅语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"24\" y=\"28\" width=\"72\" height=\"14\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"40\" y=\"14\" width=\"40\" height=\"12\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">电视柜</text></svg>"
+    },
+    {
+      "id": "furniture-desk",
+      "name": "书桌",
+      "category": "furniture",
+      "aliases": [
+        "写字台",
+        "学习桌"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 62,
+      "drawingRules": {
+        "lineStyle": "compact-desk-against-wall",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "study-desk"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "compact-rect",
+          "bedroom-or-study"
+        ],
+        "geometryPriors": [
+          "bedroom-study"
+        ],
+        "rejectIf": [
+          "kitchen"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "书房/次卧语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"32\" y=\"20\" width=\"56\" height=\"22\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"70\" y=\"24\" width=\"12\" height=\"14\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">书桌</text></svg>"
+    },
+    {
+      "id": "annotation-axis",
+      "name": "轴线编号",
+      "category": "annotation",
+      "aliases": [
+        "轴号",
+        "定位轴线"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 88,
+      "drawingRules": {
+        "lineStyle": "circle-with-number-or-letter",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "axis-bubble"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "circle-label",
+          "drawing-margin"
+        ],
+        "geometryPriors": [
+          "outside-rooms"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "必须排除出墙体；可作比例/对齐证据。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"40\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"40\" y=\"32\" text-anchor=\"middle\" font-size=\"12\" fill=\"#0f172a\">1</text><circle cx=\"80\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"80\" y=\"32\" text-anchor=\"middle\" font-size=\"12\" fill=\"#0f172a\">A</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">轴线</text></svg>"
+    },
+    {
+      "id": "annotation-elevation",
+      "name": "标高符号",
+      "category": "annotation",
+      "aliases": [
+        "标高",
+        "相对标高"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 82,
+      "drawingRules": {
+        "lineStyle": "triangle-elevation-mark",
+        "relativeThickness": "symbol",
+        "fill": "mixed",
+        "commonVariants": [
+          "filled-triangle",
+          "open-triangle"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "elevation-triangle",
+          "nearby-number"
+        ],
+        "geometryPriors": [
+          "margin-or-room-corner"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "排除出墙；可用于层高提示。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M40 36 L60 16 L80 36 Z\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#0f172a\"/><path d=\"M30 36 H90\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"50\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">±0.000</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">标高</text></svg>"
+    },
+    {
+      "id": "annotation-section",
+      "name": "剖切符号",
+      "category": "annotation",
+      "aliases": [
+        "剖面号",
+        "剖切索引"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "section-cut-with-arrows",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "section-line"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "section-cut-marks",
+          "letter-index"
+        ],
+        "geometryPriors": [
+          "across-plan"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "排除出结构墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 32 H96\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M24 20 V44 M96 20 V44\" stroke=\"#0f172a\" stroke-width=\"3\"/><text x=\"24\" y=\"16\" text-anchor=\"middle\" font-size=\"10\" fill=\"#0f172a\">1</text><text x=\"96\" y=\"16\" text-anchor=\"middle\" font-size=\"10\" fill=\"#0f172a\">1</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">剖切</text></svg>"
+    },
+    {
+      "id": "annotation-scale",
+      "name": "比例尺",
+      "category": "annotation",
+      "aliases": [
+        "图例比例",
+        "比例"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner",
+        "ocr-label-scanner"
+      ],
+      "priority": 75,
+      "drawingRules": {
+        "lineStyle": "text-or-graphic-scale",
+        "relativeThickness": "n/a",
+        "fill": "n/a",
+        "commonVariants": [
+          "1:100",
+          "graphic-bar"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "scale-text",
+          "title-block"
+        ],
+        "geometryPriors": [
+          "drawing-margin"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "用于米制换算；不进几何模型。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M28 30 H92\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M28 26 V34 M44 26 V34 M60 26 V34 M76 26 V34 M92 26 V34\" stroke=\"#0f172a\"/><text x=\"60\" y=\"22\" text-anchor=\"middle\" font-size=\"10\" fill=\"#0f172a\">1:100</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">比例</text></svg>"
+    },
+    {
+      "id": "annotation-title-block",
+      "name": "图框/标题栏",
+      "category": "annotation",
+      "aliases": [
+        "图签",
+        "会签栏"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 65,
+      "drawingRules": {
+        "lineStyle": "margin-table",
+        "relativeThickness": "n/a",
+        "fill": "none",
+        "commonVariants": [
+          "corner-title-block"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "corner-table",
+          "project-meta-text"
+        ],
+        "geometryPriors": [
+          "drawing-margin"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "整图裁切时应排除，避免误当房间。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"20\" y=\"10\" width=\"80\" height=\"36\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M20 28 H100 M60 10 V46\" stroke=\"#0f172a\"/><text x=\"40\" y=\"22\" text-anchor=\"middle\" font-size=\"8\" fill=\"#64748b\">工程</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">图框</text></svg>"
+    },
+    {
+      "id": "wall-double-line",
+      "name": "双线墙",
+      "category": "wall",
+      "aliases": [
+        "双线图墙",
+        "空心墙"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "interior_wall",
+      "outputField": "walls",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 88,
+      "drawingRules": {
+        "lineStyle": "double-parallel",
+        "relativeThickness": "medium",
+        "fill": "none",
+        "commonVariants": [
+          "parallel-wall-lines"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "two-parallel-wall-lines"
+        ],
+        "geometryPriors": [
+          "consistent-spacing"
+        ],
+        "rejectIf": [
+          "single-thin-line"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "国标常见内墙画法；厚度取双线间距。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 28 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M16 36 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">双线墙</text></svg>"
+    },
+    {
+      "id": "door-arch",
+      "name": "拱形门",
+      "category": "opening",
+      "aliases": [
+        "圆拱门",
+        "门洞拱券"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 84,
+      "drawingRules": {
+        "lineStyle": "arch-gap-with-arc-top",
+        "relativeThickness": "opening-gap",
+        "fill": "none",
+        "commonVariants": [
+          "semicircle-arch"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "semicircular-arch",
+          "wall-gap"
+        ],
+        "geometryPriors": [
+          "entry-or-public-space"
+        ],
+        "rejectIf": [
+          "rectangular-swing-only"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "公区/欧式户型；开洞为拱形。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 48 H96\" stroke=\"#94a3b8\" stroke-width=\"8\"/><path d=\"M40 48 A20 20 0 0 1 80 48\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">拱形门</text></svg>"
+    },
+    {
+      "id": "door-security",
+      "name": "子母门/防盗门",
+      "category": "opening",
+      "aliases": [
+        "子母门",
+        "入户防盗门"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "entrance_door",
+      "outputField": "doors",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 96,
+      "drawingRules": {
+        "lineStyle": "wide-double-leaf-asymmetric",
+        "relativeThickness": "wide-opening",
+        "fill": "none",
+        "commonVariants": [
+          "main-sub-leaf"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wide-entry",
+          "two-leaves-unequal"
+        ],
+        "geometryPriors": [
+          "entry-foyer"
+        ],
+        "rejectIf": [
+          "interior-room-door"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "入户宽门；子叶较小。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 48 H102\" stroke=\"#94a3b8\" stroke-width=\"8\"/><path d=\"M34 48 V18\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M70 48 V18\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M34 48 A18 18 0 0 1 52 30\" stroke=\"#0f172a\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">子母门</text></svg>"
+    },
+    {
+      "id": "window-louver",
+      "name": "百叶窗",
+      "category": "opening",
+      "aliases": [
+        "百页窗",
+        "遮阳窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "window",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "parallel-slashes-in-wall",
+        "relativeThickness": "wall-band",
+        "fill": "none",
+        "commonVariants": [
+          "diagonal-louvers"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "diagonal-hatch-in-window-band"
+        ],
+        "geometryPriors": [
+          "bathroom-kitchen-storage"
+        ],
+        "rejectIf": [
+          "door-arc"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "厨卫/储物间小窗常见。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"3\"/><path d=\"M24 28 L40 36 M32 28 L48 36 M40 28 L56 36\" stroke=\"#64748b\" stroke-width=\"1\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">百叶窗</text></svg>"
+    },
+    {
+      "id": "window-skylight",
+      "name": "天窗",
+      "category": "opening",
+      "aliases": [
+        "采光天窗",
+        "屋顶窗"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "skylight",
+      "outputField": "windows",
+      "scannerIds": [
+        "window-symbol-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "rect-with-cross-in-ceiling-plan",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "roof-window-mark"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "ceiling-plan-window-mark",
+          "cross-in-rect"
+        ],
+        "geometryPriors": [
+          "top-floor-room"
+        ],
+        "rejectIf": [
+          "exterior-wall-band"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "顶层复式；平面标高投影。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"18\" width=\"40\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M40 18 L80 46 M80 18 L40 46\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">天窗</text></svg>"
+    },
+    {
+      "id": "stairs-u-shape",
+      "name": "U 形楼梯",
+      "category": "circulation",
+      "aliases": [
+        "双跑楼梯",
+        "回形楼梯"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stairs",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "two-flights-with-landing",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "U-flight"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "two-parallel-flights",
+          "middle-landing"
+        ],
+        "geometryPriors": [
+          "stair-core"
+        ],
+        "rejectIf": [
+          "furniture-bed"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "双跑楼梯；需识别中间平台。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 48 H52 V28 H96 V48\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M24 40 H44 M24 32 H44 M52 28 V40 M72 28 V40\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">U楼梯</text></svg>"
+    },
+    {
+      "id": "fixture-dishwasher",
+      "name": "洗碗机",
+      "category": "appliance",
+      "aliases": [
+        "嵌入式洗碗机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_appliance",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 76,
+      "drawingRules": {
+        "lineStyle": "cabinet-with-D-mark",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "under-counter-dishwasher"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "kitchen-cabinet-rect",
+          "D-label"
+        ],
+        "geometryPriors": [
+          "kitchen-adjacent-cabinets"
+        ],
+        "rejectIf": [
+          "bathroom"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "厨房语义辅助。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"16\" width=\"44\" height=\"32\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"36\" text-anchor=\"middle\" font-size=\"14\" fill=\"#0f172a\">D</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">洗碗机</text></svg>"
+    },
+    {
+      "id": "fixture-bidet",
+      "name": "妇洗器",
+      "category": "fixture",
+      "aliases": [
+        "净身器"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "bath_fixture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 74,
+      "drawingRules": {
+        "lineStyle": "small-oval-fixture",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "bidet-top-view"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-bathroom-oval",
+          "near-toilet"
+        ],
+        "geometryPriors": [
+          "bathroom"
+        ],
+        "rejectIf": [
+          "kitchen"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "高端卫生间语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><ellipse cx=\"60\" cy=\"30\" rx=\"16\" ry=\"10\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">妇洗器</text></svg>"
+    },
+    {
+      "id": "furniture-chair",
+      "name": "椅子",
+      "category": "furniture",
+      "aliases": [
+        "餐椅",
+        "单椅"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 58,
+      "drawingRules": {
+        "lineStyle": "small-seat-outline",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "dining-chair"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-seat-rect",
+          "near-table"
+        ],
+        "geometryPriors": [
+          "dining-living"
+        ],
+        "rejectIf": [
+          "column-solid"
+        ],
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "弱语义；辅助餐厅判定。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"44\" y=\"22\" width=\"32\" height=\"24\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><rect x=\"50\" y=\"14\" width=\"20\" height=\"10\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">椅子</text></svg>"
+    },
+    {
+      "id": "furniture-cabinet",
+      "name": "储物柜",
+      "category": "furniture",
+      "aliases": [
+        "矮柜",
+        "玄关柜",
+        "餐边柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 64,
+      "drawingRules": {
+        "lineStyle": "long-low-cabinet",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "sideboard",
+          "entry-cabinet"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-low-rect",
+          "against-wall"
+        ],
+        "geometryPriors": [
+          "entry-dining"
+        ],
+        "rejectIf": [
+          "tv-cabinet-with-screen"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "玄关/餐厅语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"26\" y=\"22\" width=\"68\" height=\"22\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M26 22 H94\" stroke=\"#0f172a\"/><path d=\"M60 22 V44\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">储物柜</text></svg>"
+    },
+    {
+      "id": "furniture-nightstand",
+      "name": "床头柜",
+      "category": "furniture",
+      "aliases": [
+        "床头柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "furniture",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "small-square-near-bed",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "bedside-table"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-square",
+          "adjacent-bed"
+        ],
+        "geometryPriors": [
+          "bedroom"
+        ],
+        "rejectIf": [
+          "kitchen"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "卧室语义。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"46\" y=\"20\" width=\"28\" height=\"24\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">床头柜</text></svg>"
+    },
+    {
+      "id": "annotation-grid",
+      "name": "轴网/定位网格",
+      "category": "annotation",
+      "aliases": [
+        "轴网",
+        "定位线"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 86,
+      "drawingRules": {
+        "lineStyle": "center-dot-grid",
+        "relativeThickness": "very-thin",
+        "fill": "none",
+        "commonVariants": [
+          "dot-grid"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-grid-lines",
+          "center-dots"
+        ],
+        "geometryPriors": [
+          "full-drawing"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0
+      },
+      "commercialNotes": "全图定位网格，不得当墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 32 H100 M60 12 V52\" stroke=\"#94a3b8\" stroke-width=\"1\" stroke-dasharray=\"4 3\"/><circle cx=\"60\" cy=\"32\" r=\"3\" fill=\"#64748b\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">轴网</text></svg>"
+    },
+    {
+      "id": "annotation-room-area",
+      "name": "面积标注",
+      "category": "annotation",
+      "aliases": [
+        "面积文字",
+        "㎡标注"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "annotation",
+      "outputField": "textLabels",
+      "scannerIds": [
+        "ocr-label-scanner"
+      ],
+      "priority": 90,
+      "drawingRules": {
+        "lineStyle": "text-with-area-unit",
+        "relativeThickness": "n/a",
+        "fill": "n/a",
+        "commonVariants": [
+          "12.5㎡",
+          "128㎡"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "area-number-with-sqm",
+          "inside-room"
+        ],
+        "geometryPriors": [
+          "room-center"
+        ],
+        "confidenceBoost": 0.12
+      },
+      "commercialNotes": "辅助房间面积校验，不当墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><text x=\"60\" y=\"34\" text-anchor=\"middle\" font-size=\"16\" fill=\"#0f172a\" font-family=\"sans-serif\">12.5㎡</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">面积</text></svg>"
+    },
+    {
+      "id": "annotation-opening-frame",
+      "name": "洞口辅助框",
+      "category": "annotation",
+      "aliases": [
+        "窗洞辅助框",
+        "门洞辅助线框"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "annotation",
+      "outputField": "annotationSymbols",
+      "scannerIds": [
+        "annotation-dimension-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "thin-rect-frame-near-opening",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "window-frame-guide",
+          "door-frame-guide"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "overlaps-window-or-door-symbol",
+          "thin-rectangular-frame"
+        ],
+        "geometryPriors": [
+          "near-opening"
+        ],
+        "excludeFromModel": true,
+        "rejectIf": [
+          "structural-wall-band"
+        ],
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "洞口附近辅助线框，不当墙、不进洞口模型。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"28\" y=\"16\" width=\"64\" height=\"28\" stroke=\"#94a3b8\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\" fill=\"none\"/><path d=\"M36 30 H84\" stroke=\"#cbd5e1\" stroke-width=\"1\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">洞口框</text></svg>"
+    },
+    {
+      "id": "railing-glass",
+      "name": "玻璃栏板",
+      "category": "railing",
+      "aliases": [
+        "玻璃护栏",
+        "透明栏杆"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "railing",
+      "outputField": "symbols",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 83,
+      "drawingRules": {
+        "lineStyle": "thin-line-with-glass-hatch",
+        "relativeThickness": "very-thin",
+        "fill": "none",
+        "commonVariants": [
+          "glass-balustrade-hatch"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-edge",
+          "light-hatch"
+        ],
+        "geometryPriors": [
+          "balcony-terrace-edge"
+        ],
+        "rejectIf": [
+          "thick-wall"
+        ],
+        "confidenceBoost": 0.07
+      },
+      "commercialNotes": "精装示意图常见；非承重。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M16 40 H104\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M16 24 H104\" stroke=\"#0f172a\" stroke-width=\"1\"/><path d=\"M24 28 H96\" stroke=\"#94a3b8\" stroke-width=\"0.8\" stroke-dasharray=\"2 2\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">玻璃栏</text></svg>"
+    },
+    {
+      "id": "shaft-AC",
+      "name": "空调机位",
+      "category": "shaft",
+      "aliases": [
+        "空调井",
+        "设备平台"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "ac_platform",
+      "outputField": "symbols",
+      "scannerIds": [
+        "room-void-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "small-protruding-box",
+        "relativeThickness": "compact",
+        "fill": "outline",
+        "commonVariants": [
+          "AC-balcony-niche"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-exterior-niche",
+          "ocr-空调"
+        ],
+        "geometryPriors": [
+          "exterior-adjacent-bedroom-living"
+        ],
+        "rejectIf": [
+          "main-room"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "不计入主要室内面积。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"14\" width=\"44\" height=\"30\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#e0f2fe\"/><text x=\"60\" y=\"32\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0284c7\">AC</text><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">空调位</text></svg>"
+    },
+    {
+      "id": "bay-window-platform",
+      "name": "飘窗台",
+      "category": "outdoor",
+      "aliases": [
+        "飘窗台",
+        "窗下柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "bay_window_platform",
+      "outputField": "symbols",
+      "scannerIds": [
+        "window-symbol-scanner",
+        "furniture-fixture-scanner"
+      ],
+      "priority": 84,
+      "drawingRules": {
+        "lineStyle": "protruding-rect-under-window",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "bay-seat-platform"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "under-bay-window-rect",
+          "protruding-platform"
+        ],
+        "geometryPriors": [
+          "adjacent-bay-window"
+        ],
+        "rejectIf": [
+          "interior-wall-band"
+        ],
+        "confidenceBoost": 0.08
+      },
+      "commercialNotes": "凸窗下结构；计入外扩平台。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M36 40 H84 V18 H36 Z\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#f8fafc\"/><path d=\"M36 18 H84\" stroke=\"#0f172a\" stroke-width=\"3\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">飘窗台</text></svg>"
+    },
+    {
+      "id": "floor-heating",
+      "name": "地暖回路",
+      "category": "mep",
+      "aliases": [
+        "地暖",
+        "采暖回路"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "floor_heating",
+      "outputField": "symbols",
+      "scannerIds": [
+        "mep-symbol-scanner",
+        "annotation-dimension-scanner"
+      ],
+      "priority": 80,
+      "drawingRules": {
+        "lineStyle": "serpentine-or-parallel-loop",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "serpentine-loop",
+          "parallel-coils"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "serpentine-thin-lines",
+          "room-interior-pattern"
+        ],
+        "geometryPriors": [
+          "inside-room-void"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "装修工序证据，不进墙体。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M24 42 Q36 24 48 42 T72 42 T96 42\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">地暖</text></svg>"
+    },
+    {
+      "id": "radiator",
+      "name": "暖气片",
+      "category": "mep",
+      "aliases": [
+        "散热片",
+        "明装暖气"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "radiator",
+      "outputField": "symbols",
+      "scannerIds": [
+        "mep-symbol-scanner"
+      ],
+      "priority": 76,
+      "drawingRules": {
+        "lineStyle": "rect-with-fins",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "panel-radiator"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-rect-with-vertical-fins",
+          "against-wall"
+        ],
+        "geometryPriors": [
+          "exterior-wall-adjacent"
+        ],
+        "rejectIf": [
+          "furniture-bed"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "北方户型；贴外墙布置。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"40\" y=\"14\" width=\"40\" height=\"30\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M48 18 V40 M56 18 V40 M64 18 V40 M72 18 V40\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">暖气片</text></svg>"
+    },
+    {
+      "id": "outlet-power",
+      "name": "强电插座",
+      "category": "electrical",
+      "aliases": [
+        "电源插座",
+        "五孔插座"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "power_outlet",
+      "outputField": "symbols",
+      "scannerIds": [
+        "electrical-symbol-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "small-circle-or-arc-mark",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "circle-outlet",
+          "semicircle-outlet"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-wall-symbol",
+          "near-kitchen-bath-bedroom-wall"
+        ],
+        "geometryPriors": [
+          "against-wall"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "电气点位；不参与结构建模。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"60\" cy=\"28\" r=\"10\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M56 28 H64 M60 24 V32\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">强电</text></svg>"
+    },
+    {
+      "id": "outlet-low-voltage",
+      "name": "弱电/网络点",
+      "category": "electrical",
+      "aliases": [
+        "网口",
+        "TV口",
+        "弱电箱点位"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "data_outlet",
+      "outputField": "symbols",
+      "scannerIds": [
+        "electrical-symbol-scanner"
+      ],
+      "priority": 68,
+      "drawingRules": {
+        "lineStyle": "small-triangle-or-square-mark",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "triangle-data",
+          "square-data"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-data-mark",
+          "living-bedroom-entry"
+        ],
+        "geometryPriors": [
+          "against-wall"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "弱电布线参考。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"48\" y=\"18\" width=\"24\" height=\"20\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M52 24 H68 M52 30 H68\" stroke=\"#64748b\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">弱电</text></svg>"
+    },
+    {
+      "id": "switch-single",
+      "name": "单控开关",
+      "category": "electrical",
+      "aliases": [
+        "开关",
+        "单联开关"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "switch",
+      "outputField": "symbols",
+      "scannerIds": [
+        "electrical-symbol-scanner"
+      ],
+      "priority": 66,
+      "drawingRules": {
+        "lineStyle": "small-tick-on-wall",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "S-mark",
+          "tick-switch"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-switch-tick",
+          "door-adjacent-wall"
+        ],
+        "geometryPriors": [
+          "near-door-opening"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "门边常见；电气工序。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M48 20 V44\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M48 28 H72\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">开关</text></svg>"
+    },
+    {
+      "id": "light-ceiling",
+      "name": "吸顶灯/筒灯",
+      "category": "electrical",
+      "aliases": [
+        "筒灯",
+        "吸顶灯"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "ceiling_light",
+      "outputField": "symbols",
+      "scannerIds": [
+        "electrical-symbol-scanner"
+      ],
+      "priority": 64,
+      "drawingRules": {
+        "lineStyle": "circle-with-cross-or-dot",
+        "relativeThickness": "symbol",
+        "fill": "none",
+        "commonVariants": [
+          "circle-cross",
+          "circle-dot"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "room-center-circle",
+          "cross-in-circle"
+        ],
+        "geometryPriors": [
+          "room-center"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "灯光点位。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><circle cx=\"60\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M48 28 H72 M60 16 V40\" stroke=\"#0f172a\" stroke-width=\"1\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">筒灯</text></svg>"
+    },
+    {
+      "id": "light-strip",
+      "name": "灯带",
+      "category": "electrical",
+      "aliases": [
+        "LED灯带",
+        "线性灯"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "light_strip",
+      "outputField": "symbols",
+      "scannerIds": [
+        "electrical-symbol-scanner",
+        "annotation-dimension-scanner"
+      ],
+      "priority": 62,
+      "drawingRules": {
+        "lineStyle": "dashed-line-with-dots",
+        "relativeThickness": "thin",
+        "fill": "none",
+        "commonVariants": [
+          "ceiling-perimeter-strip"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "dashed-ceiling-line",
+          "perimeter-loop"
+        ],
+        "geometryPriors": [
+          "ceiling-plan"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "吊顶灯带；不进墙。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M20 28 H100\" stroke=\"#0f172a\" stroke-width=\"2\" stroke-dasharray=\"4 3\"/><circle cx=\"32\" cy=\"28\" r=\"2\" fill=\"#0f172a\"/><circle cx=\"60\" cy=\"28\" r=\"2\" fill=\"#0f172a\"/><circle cx=\"88\" cy=\"28\" r=\"2\" fill=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">灯带</text></svg>"
+    },
+    {
+      "id": "niche-recess",
+      "name": "壁龛",
+      "category": "fixture",
+      "aliases": [
+        "壁龛",
+        "龛柜"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "niche",
+      "outputField": "symbols",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "rect-recess-in-wall",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "shower-niche",
+          "entry-niche"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "wall-recess-rect",
+          "bath-entry"
+        ],
+        "geometryPriors": [
+          "wet-area-or-entry"
+        ],
+        "rejectIf": [
+          "furniture"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "湿区或玄关收纳。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M44 16 H76 V44 H44 Z\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M44 16 H76\" stroke=\"#94a3b8\" stroke-width=\"6\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">壁龛</text></svg>"
+    },
+    {
+      "id": "curtain-box",
+      "name": "窗帘盒",
+      "category": "fixture",
+      "aliases": [
+        "窗帘盒",
+        "窗幔盒"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "curtain_box",
+      "outputField": "symbols",
+      "scannerIds": [
+        "structural-wall-scanner"
+      ],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "short-thick-band-above-window",
+        "relativeThickness": "medium",
+        "fill": "solid-or-none",
+        "commonVariants": [
+          "window-head-box"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-band-above-window",
+          "interior-side"
+        ],
+        "geometryPriors": [
+          "above-window-opening"
+        ],
+        "rejectIf": [
+          "full-wall-span"
+        ],
+        "confidenceBoost": 0.05
+      },
+      "commercialNotes": "吊顶/窗帘工序。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"28\" y=\"18\" width=\"64\" height=\"10\" fill=\"#cbd5e1\" stroke=\"#0f172a\"/><path d=\"M28 28 H92\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">窗帘盒</text></svg>"
+    },
+    {
+      "id": "threshold-stone",
+      "name": "过门石",
+      "category": "fixture",
+      "aliases": [
+        "过门石",
+        "门槛石"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "threshold",
+      "outputField": "symbols",
+      "scannerIds": [
+        "door-opening-scanner"
+      ],
+      "priority": 68,
+      "drawingRules": {
+        "lineStyle": "short-thick-bar-at-door",
+        "relativeThickness": "symbol",
+        "fill": "solid",
+        "commonVariants": [
+          "door-threshold-bar"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-bar-at-door-gap"
+        ],
+        "geometryPriors": [
+          "door-opening-center"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "湿区交界工序标记。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"36\" y=\"26\" width=\"48\" height=\"8\" fill=\"#64748b\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">过门石</text></svg>"
+    },
+    {
+      "id": "waterproof-dam",
+      "name": "挡水条/石基",
+      "category": "fixture",
+      "aliases": [
+        "淋浴挡水条",
+        "石基"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "water_dam",
+      "outputField": "symbols",
+      "scannerIds": [
+        "furniture-fixture-scanner"
+      ],
+      "priority": 74,
+      "drawingRules": {
+        "lineStyle": "short-bar-at-shower-entry",
+        "relativeThickness": "symbol",
+        "fill": "solid",
+        "commonVariants": [
+          "shower-curb"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-bar-at-shower",
+          "bathroom-zone"
+        ],
+        "geometryPriors": [
+          "bathroom-shower-entry"
+        ],
+        "rejectIf": [
+          "exterior-wall"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "卫生间干湿分离。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"24\" y=\"28\" width=\"72\" height=\"6\" fill=\"#94a3b8\" stroke=\"#0f172a\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">挡水条</text></svg>"
+    },
+    {
+      "id": "HVAC-indoor-unit",
+      "name": "空调室内机",
+      "category": "mep",
+      "aliases": [
+        "室内机",
+        "风管机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "hvac_indoor",
+      "outputField": "symbols",
+      "scannerIds": [
+        "mep-symbol-scanner"
+      ],
+      "priority": 78,
+      "drawingRules": {
+        "lineStyle": "rect-with-airflow-tick",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "wall-mounted-unit",
+          "ceiling-cassette"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "rect-with-flow-mark",
+          "living-bedroom"
+        ],
+        "geometryPriors": [
+          "upper-wall-or-ceiling-plan"
+        ],
+        "rejectIf": [
+          "furniture-bed"
+        ],
+        "confidenceBoost": 0.06
+      },
+      "commercialNotes": "机电点位。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"16\" width=\"52\" height=\"24\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"#fff\"/><path d=\"M40 28 H80\" stroke=\"#0284c7\" stroke-width=\"1.5\"/><path d=\"M76 24 L84 28 L76 32\" stroke=\"#0284c7\" fill=\"none\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">空调内机</text></svg>"
+    },
+    {
+      "id": "fresh-air-vent",
+      "name": "新风口",
+      "category": "mep",
+      "aliases": [
+        "新风",
+        "回风口"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "vent",
+      "outputField": "symbols",
+      "scannerIds": [
+        "mep-symbol-scanner"
+      ],
+      "priority": 72,
+      "drawingRules": {
+        "lineStyle": "square-with-diagonal-or-grid",
+        "relativeThickness": "symbol",
+        "fill": "outline",
+        "commonVariants": [
+          "supply-vent",
+          "return-vent"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "square-vent-grid",
+          "ceiling-or-wall"
+        ],
+        "geometryPriors": [
+          "public-corridor-or-living"
+        ],
+        "excludeFromModel": true,
+        "confidenceBoost": 0.04
+      },
+      "commercialNotes": "新风系统图例。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"42\" y=\"16\" width=\"36\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M48 22 H72 M48 28 H72 M48 34 H72\" stroke=\"#64748b\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">新风口</text></svg>"
+    }
+  ],
+  "updatedAt": "2026-08-25T07:15:00.000Z"
+}

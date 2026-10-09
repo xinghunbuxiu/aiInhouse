@@ -1,0 +1,13 @@
+{
+  "name": "aiinhouse-codex-worker",
+  "version": "0.1.0",
+  "description": "AIInHouse 本地 Codex 任务 mock 处理器",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "cookie": "",
+  "headers": {
+    "x-qh-appid": "当前 BIM 页面中的 designId，例如 3FO4K4VYBAIK",
+    "x-qh-vrc": "V0150R0105",
+    "x-tool-name": "diy",
+    "referer": "https://yun.kujiale.com/cloud/tool/h5/bim?..."
+  },
+  "notes": [
+    "从浏览器 Network 面板复制 cookie 和 x-qh-appid 等请求头。",
+    "也可通过环境变量 KUJIALE_ACCESS_TOKEN / KUJIALE_COOKIE 传入。",
+    "请勿把真实 token/cookie 提交到 git。"
+  ]
+}

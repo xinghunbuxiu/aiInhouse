@@ -1,0 +1,14 @@
+{
+  "name": "aiinhouse-desktop-worker",
+  "version": "0.1.0",
+  "description": "AIInHouse 桌面端任务执行器",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:once": "node src/index.js --once",
+    "check": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

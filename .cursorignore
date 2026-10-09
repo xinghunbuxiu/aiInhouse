@@ -1,0 +1,36 @@
+# Heavy / regenerable — keep out of agent context & indexing
+tmp/
+**/tmp/
+logs/
+coverage/
+.nyc_output/
+.cache/
+.waylog/
+downloads/
+
+# Local floorplan corpora (large binaries; use explicitly when needed)
+backend/uploads/floorplans/
+backend/uploads/**/*.jpg
+backend/uploads/**/*.jpeg
+backend/uploads/**/*.png
+backend/uploads/**/*.webp
+backend/uploads/**/*.gif
+backend/uploads/**/*.mp4
+backend/uploads/**/*.bin
+backend/uploads/**/*.glb
+backend/uploads/**/*.blend
+
+# Build / deps
+node_modules/
+dist/
+dist-ssr/
+build/
+out/
+src-tauri/target/
+
+# Native / lock noise
+*.log
+*.map
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

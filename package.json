@@ -1,0 +1,52 @@
+{
+  "name": "aiinhouse",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --base ./",
+    "preview": "vite preview",
+    "desktop:start": "tauri dev",
+    "desktop:pack": "tauri build --debug",
+    "desktop:dist": "tauri build",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "setup:workers": "node scripts/setup-local-workers.mjs",
+    "worker:start": "node desktop-worker/src/index.js",
+    "worker:start:once": "node desktop-worker/src/index.js --once",
+    "codex:worker": "node codex-worker/src/index.js",
+    "assets:seed": "node scripts/seed-design-assets.mjs && node scripts/generate-procedural-glb-assets.mjs && node scripts/enrich-design-assets.mjs",
+    "clean:cache": "node scripts/clean-project-cache.mjs",
+    "clean:cache:all": "node scripts/clean-project-cache.mjs --all-tmp",
+    "pipeline:commercial": "node scripts/run-commercial-pipeline.mjs",
+    "kujiale:3d": "node scripts/download-kujiale-3d.mjs",
+    "kujiale:3d:all-views": "node scripts/download-kujiale-3d.mjs --views-only --limit 0",
+    "kujiale:3d:session": "node scripts/download-kujiale-3d.mjs --session-app --api-only",
+    "kujiale:3d:probe": "node scripts/probe-kujiale-3d-network.mjs",
+    "kujiale:3d:inspect": "node scripts/inspect-kujiale-3d.mjs",
+    "kujiale:benchmark": "node scripts/benchmark-kujiale-structure-recognition.mjs",
+    "kujiale:benchmark:all": "node scripts/benchmark-kujiale-structure-recognition.mjs --limit 0 --resume"
+  },
+  "dependencies": {
+    "axios": "^1.14.0",
+    "cheerio": "^1.2.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "mysql2": "^3.20.0",
+    "node-cron": "^4.2.1",
+    "pannellum": "^2.5.6",
+    "three": "^0.169.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.4.19",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.2",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "vite": "^6.0.5"
+  }
+}
