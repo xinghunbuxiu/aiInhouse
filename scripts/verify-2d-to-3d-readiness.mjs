@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { countVerifiedAttachedOpenings } from './benchmark-kujiale-structure-recognition.mjs';
+import { countVerifiedAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
 
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
@@ -85,6 +85,16 @@ const benchmarkAttachedCount = countVerifiedAttachedOpenings([
   { id: 'pending-review', attachedWallId: 'wall-1', needsWallAttachmentReview: true }
 ], [{ id: 'wall-1' }]);
 assert(benchmarkAttachedCount === 1, 'Benchmark must count only openings with an explicit existing wall reference and no review flag.');
+
+const noGroundTruthSummary = summarizeBenchmark([{
+  error: null,
+  expected: { layout: '' },
+  readinessStatus: 'unknown',
+  readinessScore: null
+}]);
+assert(noGroundTruthSummary.exactLayoutMatchRate === null, 'Missing labeled layout ground truth must produce N/A, not a false 0% accuracy.');
+const noValidSampleSummary = summarizeBenchmark([{ error: 'preprocess failed' }]);
+assert(noValidSampleSummary.commercialReadyRate === null, 'No valid benchmark samples must produce N/A, not a false 0% readiness rate.');
 
 // Recovery regression: weak first-pass drafts should be reviewed using the
 // complete initial draft, with explicit anti-hallucination constraints.
