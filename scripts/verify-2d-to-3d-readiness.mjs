@@ -70,11 +70,13 @@ const adjacentRooms = assignOcrSemantics([
   { id: 'elevator-shaft', name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.7 },
   { id: 'bathroom', name: '空间B', type: 'space', x: 110, y: 0, width: 100, height: 100, confidence: 0.7 }
 ], [
-  { text: '卫生间', x: 115, y: 40, width: 10, height: 20, confidence: 0.95 }
+  { id: 'ocr-bathroom-1', text: '卫生间', x: 115, y: 40, width: 10, height: 20, confidence: 0.95, source: 'opencv-ocr' }
 ]);
 assert(adjacentRooms[0].name === '空间A', 'OCR labels outside a room must not relabel that room.');
 assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not turn an elevator/adjacent space into a bathroom.');
 assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
+assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
+assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
 
 // Recovery regression: weak first-pass drafts should be reviewed using the
 // complete initial draft, with explicit anti-hallucination constraints.
@@ -161,6 +163,17 @@ assert(attachmentChecks.metrics.wallAttachedOpeningCount === 1, 'Only openings a
 assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4)), 'Wall attachment ratio must reflect all detected openings.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
+const evidenceTrace = validateFloorplanDraft({
+  rooms: [{ id: 'evidence-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100, source: 'opencv-wall-grid', sourceEvidence: { imageBox: { x: 8, y: 12, width: 100, height: 90 }, candidateId: 'room-candidate-7' } }],
+  walls: [{ id: 'evidence-wall', start: { x: 10, y: 10 }, end: { x: 10, y: 10 }, source: 'ml-wall', sourceEvidence: { imageSegmentId: 'segment-4', confidence: 0.51 } }],
+  doors: [{ id: 'evidence-door', x: 500, y: 500, source: 'door-symbol-scanner', sourceEvidence: { imageBox: { x: 480, y: 490, width: 24, height: 12 } } }],
+  windows: []
+});
+const tracedWallIssue = evidenceTrace.issues.find(issue => issue.code === 'invalid-wall-segment');
+assert(tracedWallIssue.entityEvidence?.[0]?.sourceEvidence?.imageSegmentId === 'segment-4', 'Spatial diagnostics must preserve the source evidence for the affected wall.');
+const tracedDoorIssue = evidenceTrace.issues.find(issue => issue.code === 'door-not-associated-with-room');
+assert(tracedDoorIssue.entityEvidence?.[0]?.sourceEvidence?.imageBox?.x === 480, 'Opening diagnostics must preserve the originating image box.');
+
 const emptyMetrics = validateFloorplanDraft({ rooms: [], walls: [], doors: [], windows: [] }).metrics;
 assert(emptyMetrics.roomGeometryValidRatio === null, 'Missing room evidence must be null, not a misleading zero ratio.');
 assert(emptyMetrics.wallGeometryValidRatio === null, 'Missing wall evidence must be null, not a misleading zero ratio.');
