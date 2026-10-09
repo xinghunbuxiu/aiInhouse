@@ -4649,5 +4649,6 @@ async function prepareRecognitionDraft(job, outputDir, options = {}) {
 module.exports = {
   prepareRecognitionDraft,
   buildRecognitionDraft,
-  finalizeRecognitionDraft
+  finalizeRecognitionDraft,
+  assignOcrSemantics
 };
