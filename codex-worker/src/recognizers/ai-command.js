@@ -505,9 +505,35 @@ async function runAiRecognition(job, outputDir, options = {}) {
       },
       preprocessing: options.preprocessing || null
     });
-    const probeResult = await runApiProbe(probePrompt, outputDir, options).catch(() => null);
+    // Keep the normal path to one vision-model request. The previous flow
+    // always ran a probe request and then a full recognition request, doubling
+    // latency and API cost even when the first result was already good.
     const apiResult = await runApiRecognition(prompt, schema, outputDir, options);
-    const normalized = normalizeRecognitionDraft(apiResult, options.fallbackDraft || {}, probeResult);
+    let normalized = normalizeRecognitionDraft(apiResult, options.fallbackDraft || {}, null);
+
+    // Probe only weak/ambiguous results. This second pass is a recovery path,
+    // not a mandatory preflight call for every floor plan.
+    if (normalized.quality?.needsReview) {
+      const probeResult = await runApiProbe(probePrompt, outputDir, options).catch(() => null);
+      if (probeResult) {
+        normalized = normalizeRecognitionDraft(apiResult, options.fallbackDraft || {}, probeResult);
+        normalized.quality = {
+          ...(normalized.quality || {}),
+          probeUsed: true
+        };
+      } else {
+        normalized.quality = {
+          ...(normalized.quality || {}),
+          probeUsed: false
+        };
+      }
+    } else {
+      normalized.quality = {
+        ...(normalized.quality || {}),
+        probeUsed: false
+      };
+    }
+
     fs.writeFileSync(draftFile, JSON.stringify(normalized, null, 2), 'utf8');
     return normalized;
   }
