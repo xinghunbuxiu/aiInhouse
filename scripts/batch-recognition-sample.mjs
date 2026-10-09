@@ -14,8 +14,8 @@ function getArg(flag, fallback = '') {
   return index === -1 ? fallback : process.argv[index + 1] || fallback;
 }
 
-function parseLayout(filePath) {
-  const match = path.basename(filePath).match(/(\d+)室(\d+)厅(\d+)厨(\d+)卫/);
+export function parseLayout(filePath, layoutOverride = '') {
+  const match = String(layoutOverride || path.basename(filePath)).match(/(\d+)室(\d+)厅(\d+)厨(\d+)卫/);
   if (!match) {
     return { layout: '', bedrooms: 0, halls: 0, kitchens: 0, baths: 0 };
   }
@@ -93,7 +93,7 @@ function slugify(filePath) {
   return path.basename(filePath, path.extname(filePath)).replace(/[^\w\u4e00-\u9fa5.-]+/g, '_').slice(0, 80);
 }
 
-function writeJob(filePath, outputDir) {
+function writeJob(filePath, outputDir, layoutOverride = '') {
   const job = {
     job: {
       job_no: `BATCH-${slugify(filePath)}`,
@@ -105,7 +105,7 @@ function writeJob(filePath, outputDir) {
       image_url: filePath
     },
     house: {
-      layout: parseLayout(filePath).layout
+      layout: parseLayout(filePath, layoutOverride).layout
     },
     assets: {
       local_source_file: filePath
@@ -135,9 +135,9 @@ export function countVerifiedAttachedOpenings(openings = [], walls = []) {
   }).length;
 }
 
-function evaluateImage(filePath, outputDir) {
+function evaluateImage(filePath, outputDir, layoutOverride = '') {
   fs.mkdirSync(outputDir, { recursive: true });
-  const jobFile = writeJob(filePath, outputDir);
+  const jobFile = writeJob(filePath, outputDir, layoutOverride);
   runPreprocess(jobFile, outputDir);
   const preprocessing = JSON.parse(fs.readFileSync(path.join(outputDir, 'recognition-preprocess.json'), 'utf8'));
   const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
@@ -151,7 +151,7 @@ function evaluateImage(filePath, outputDir) {
   return {
     image: filePath,
     name: path.basename(filePath),
-    layout: parseLayout(filePath).layout,
+    layout: parseLayout(filePath, layoutOverride).layout,
     strategy: repaired.strategy?.localGeometry || '',
     geometryConfidence: repaired.confidence?.geometry ?? null,
     semanticsConfidence: repaired.confidence?.semantics ?? null,
@@ -194,6 +194,7 @@ function main() {
   const limit = Number(getArg('--limit', '12')) || 12;
   const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
   const requestedImage = getArg('--image');
+  const requestedLayout = getArg('--layout');
   const discoveredImages = collectCandidates({ imagePath: requestedImage });
   if (discoveredImages.length === 0) {
     throw new Error(
@@ -208,7 +209,7 @@ function main() {
     const outDir = path.join(outputRoot, slugify(image));
     const started = Date.now();
     try {
-      const row = evaluateImage(image, outDir);
+      const row = evaluateImage(image, outDir, requestedLayout);
       results.push({ ...row, durationMs: Date.now() - started });
       process.stderr.write(`OK ${path.basename(image)} -> ${row.readinessStatus}:${row.readinessScore} rooms=${row.rooms}\n`);
     } catch (error) {
