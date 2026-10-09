@@ -92,7 +92,9 @@ function normalizeOcrCandidate(candidate = {}) {
       y: toNumber(center.y, height ? y + height / 2 : y)
     },
     confidence: toNumber(candidate.confidence, 0.72),
-    source: candidate.source || 'ocr-candidate'
+    source: candidate.source || 'ocr-candidate',
+    candidateId: candidate.id || candidate.candidateId || null,
+    box: { x, y, width, height }
   };
 }
 
@@ -159,6 +161,10 @@ function assignOcrSemantics(geometryRooms = [], ocrCandidates = []) {
         ...(room.sourceEvidence || {}),
         ocrText: best.label.text,
         ocrSource: best.label.source,
+        ocrCandidateId: best.label.candidateId,
+        ocrBox: best.label.box,
+        ocrCenter: best.label.center,
+        ocrConfidence: best.label.confidence,
         ocrDistance: Number(best.distance.toFixed(1)),
         ocrInsideRoom: best.inside
       }
