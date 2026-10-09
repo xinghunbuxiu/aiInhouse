@@ -52,6 +52,12 @@ function buildSpatialGraph(draft = {}) {
   for (let i = 0; i < rooms.length; i += 1) {
     for (let j = i + 1; j < rooms.length; j += 1) {
       const a = rooms[i], b = rooms[j];
+      // Invalid geometry must not create plausible-looking graph edges.
+      if (![a.x, a.y, a.width, a.height, b.x, b.y, b.width, b.height].every(finite)
+        || Number(a.width) <= 0 || Number(a.height) <= 0
+        || Number(b.width) <= 0 || Number(b.height) <= 0) {
+        continue;
+      }
       const verticalGap = Math.max(0,
         Number(a.y) - (Number(b.y) + Number(b.height)),
         Number(b.y) - (Number(a.y) + Number(a.height))
