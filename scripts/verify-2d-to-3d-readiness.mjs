@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { countVerifiedAttachedOpenings as countBenchmarkAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
 import { collectCandidates, parseLayout as parseBatchLayout, countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
 
@@ -263,6 +264,36 @@ const job = {
 };
 
 const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aiinhouse-2d-3d-readiness-'));
+
+// Real CLI smoke test: image metadata must remain available on Linux runners
+// without sips, even when optional Pillow/OpenCV dependencies are unavailable.
+const imageSmokeDir = path.join(outputDir, 'image-smoke');
+fs.mkdirSync(imageSmokeDir, { recursive: true });
+const tinyPngPath = path.join(imageSmokeDir, 'tiny.png');
+fs.writeFileSync(tinyPngPath, Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2ioAAAAASUVORK5CYII=',
+  'base64'
+));
+const smokeJobPath = path.join(imageSmokeDir, 'job.json');
+fs.writeFileSync(smokeJobPath, JSON.stringify({
+  job: { job_no: 'IMAGE-META-SMOKE', source_type: 'digital', input_payload: {} },
+  house: { layout: '一室一厅一卫' },
+  floor_plan: {},
+  assets: { local_source_file: tinyPngPath }
+}), 'utf8');
+const smokeOutputDir = path.join(imageSmokeDir, 'output');
+const smokeRun = spawnSync(process.execPath, [
+  path.resolve('scripts/floorplan-preprocess.mjs'),
+  '--job', smokeJobPath,
+  '--output', smokeOutputDir
+], { encoding: 'utf8', timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
+assert(smokeRun.status === 0, 'Image preprocessing CLI smoke test must exit successfully: ' + (smokeRun.stderr || smokeRun.stdout));
+const smokePayloadPath = path.join(smokeOutputDir, 'recognition-preprocess.json');
+assert(fs.existsSync(smokePayloadPath), 'Image preprocessing CLI must write its JSON payload.');
+const smokePayload = JSON.parse(fs.readFileSync(smokePayloadPath, 'utf8'));
+assert(smokePayload.status === 'completed', 'A valid image source must complete preprocessing even when optional vision dependencies are missing.');
+assert(smokePayload.beforeWidth === 1 && smokePayload.beforeHeight === 1, 'Portable PNG header parsing must preserve source image dimensions without sips.');
+assert(fs.existsSync(smokePayload.preprocessedImagePath), 'Preprocessing must return an existing image path for downstream recognition.');
 const templateDraft = repairRecognitionTopology(buildRecognitionDraft(job, makeTemplateOnlyPreprocess()));
 const templateReadiness = templateDraft.quality.threeDReadiness;
 assert(templateReadiness.status !== 'ready_for_3d', 'Template-only recognition must not be ready for automatic 3D.');
