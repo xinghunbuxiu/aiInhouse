@@ -130,6 +130,19 @@ const missingCoordinate = validateFloorplanDraft({
 assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-room-bounds'), 'Null room coordinates must not be coerced to zero.');
 assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-wall-segment'), 'Null wall coordinates must be rejected.');
 
+const openingRegressions = validateFloorplanDraft({
+  rooms: [{ id: 'room-1', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [
+    { id: 'wall-duplicate', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, thickness: 10 },
+    { id: 'wall-duplicate', start: { x: 0, y: 100 }, end: { x: 100, y: 100 }, thickness: 10 }
+  ],
+  doors: [{ id: 'door-1', x: 20, y: 20, width: 0, height: 8 }],
+  windows: [{ id: 'window-lost', x: 500, y: 500, width: 50, height: 8 }]
+});
+assert(openingRegressions.issues.some(issue => issue.code === 'duplicate-wall-id'), 'Duplicate wall IDs must be detected.');
+assert(openingRegressions.issues.some(issue => issue.code === 'invalid-door-dimensions'), 'Non-positive door dimensions must be detected.');
+assert(openingRegressions.issues.some(issue => issue.code === 'window-not-associated-with-room'), 'Windows outside all rooms must be flagged for review.');
+
 
 // Finalization must not silently discard structured diagnostics produced by
 // upstream recognizers; downstream logs should retain their code and entity.
