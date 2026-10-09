@@ -11,6 +11,7 @@ const {
   attachMlWallsToPreprocessing
 } = require('./ml-wall-command');
 const { repairRecognitionTopology } = require('./topology');
+const { validateFloorplanDraft } = require('./spatial-reasoning');
 const { summarizeRecognitionAssetsForDraft } = require('../assets/recognition-assets');
 const {
   annotatePreprocessingWithAssets,
@@ -4518,7 +4519,7 @@ function buildRecognitionDraft(job, preprocessing = null) {
 
 function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   const merged = mergePreprocessing(draft, preprocessing);
-  return reviewSemanticDoorPriors(
+  const repaired = reviewSemanticDoorPriors(
     repairRecognitionTopology(
       preferVisualDoorCandidates(
         preferVisualWindowCandidates(merged, preprocessing),
@@ -4526,6 +4527,28 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
       )
     )
   );
+  const spatialValidation = validateFloorplanDraft(repaired);
+  const previousQuality = repaired.quality || {};
+  const issues = (repaired.issues || []).filter(issue => typeof issue === 'string');
+  for (const issue of spatialValidation.issues) {
+    issues.push(`空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
+  }
+  return {
+    ...repaired,
+    issues,
+    spatialGraph: spatialValidation.graph,
+    quality: {
+      ...previousQuality,
+      spatialValidation: {
+        valid: spatialValidation.valid,
+        reviewRequired: spatialValidation.reviewRequired,
+        issueCount: spatialValidation.issues.length,
+        errorCount: spatialValidation.issues.filter(issue => issue.severity === 'error').length,
+        reviewCount: spatialValidation.issues.filter(issue => issue.severity === 'review').length,
+        issues: spatialValidation.issues
+      }
+    }
+  };
 }
 
 function mergePreprocessing(draft, preprocessing) {
