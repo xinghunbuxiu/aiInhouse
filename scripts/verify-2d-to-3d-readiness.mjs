@@ -169,7 +169,7 @@ const invalidFinalizedDraft = finalizeRecognitionDraft({
   quality: { needsReview: false }
 });
 assert(invalidFinalizedDraft.quality.needsReview, 'Spatial validation failures must force the recognition review gate.');
-assert(invalidFinalizedDraft.quality.spatialValidation.errorCount > 0, 'Finalized quality must expose spatial validation error counts.');
+assert(invalidFinalizedDraft.quality.spatialValidation.issueCount > 0, 'Finalized quality must expose spatial validation issue counts.');
 
 
 
