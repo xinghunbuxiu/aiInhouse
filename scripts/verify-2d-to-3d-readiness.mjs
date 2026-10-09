@@ -146,10 +146,26 @@ assert(openingRegressions.metrics.roomGeometryValidRatio === 1, 'Spatial metrics
 assert(openingRegressions.metrics.wallGeometryValidRatio === 1, 'Spatial metrics must expose valid wall geometry ratio separately from duplicate IDs.');
 assert(openingRegressions.metrics.openingAssociationRatio === 0.5, 'Spatial metrics must report opening association ratio across doors and windows.');
 assert(openingRegressions.metrics.issuesByCode['duplicate-wall-id'] === 1, 'Spatial metrics must count diagnostics by stable issue code.');
+assert(openingRegressions.metrics.wallAttachmentRatio === 0, 'Openings without verified wall attachment must not count as attached.');
+const attachmentChecks = validateFloorplanDraft({
+  rooms: [{ id: 'attachment-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-real', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, thickness: 10 }],
+  doors: [
+    { id: 'door-attached', x: 30, y: 0, width: 28, height: 8, attachedWallId: 'wall-real' },
+    { id: 'door-stale', x: 60, y: 0, width: 28, height: 8, attachedWallId: 'wall-deleted' },
+    { id: 'door-review', x: 80, y: 0, width: 28, height: 8, needsWallAttachmentReview: true }
+  ],
+  windows: []
+});
+assert(attachmentChecks.metrics.wallAttachedOpeningCount === 1, 'Only openings attached to a current wall and not flagged for review count as verified.');
+assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4)), 'Wall attachment ratio must reflect all detected openings.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
 const emptyMetrics = validateFloorplanDraft({ rooms: [], walls: [], doors: [], windows: [] }).metrics;
 assert(emptyMetrics.roomGeometryValidRatio === null, 'Missing room evidence must be null, not a misleading zero ratio.');
 assert(emptyMetrics.wallGeometryValidRatio === null, 'Missing wall evidence must be null, not a misleading zero ratio.');
 assert(emptyMetrics.openingAssociationRatio === null, 'Missing opening evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.wallAttachmentRatio === null, 'Missing opening evidence must not imply a 0% wall attachment rate.');
 
 
 // Finalization must not silently discard structured diagnostics produced by
