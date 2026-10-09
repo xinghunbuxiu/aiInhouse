@@ -4548,6 +4548,11 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
     spatialGraph: spatialValidation.graph,
     quality: {
       ...previousQuality,
+      // Structural contradictions must affect downstream readiness, not merely
+      // appear as informational log messages.
+      needsReview: Boolean(previousQuality.needsReview)
+        || spatialValidation.reviewRequired
+        || !spatialValidation.valid,
       spatialValidation: {
         valid: spatialValidation.valid,
         reviewRequired: spatialValidation.reviewRequired,
