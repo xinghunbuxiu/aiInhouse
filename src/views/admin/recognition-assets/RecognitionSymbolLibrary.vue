@@ -248,7 +248,7 @@
 </template>
 
 <script>
-import adminService from '@/services/adminService'
+import { adminService } from '@/services/adminService'
 
 export default {
   name: 'RecognitionSymbolLibrary',
