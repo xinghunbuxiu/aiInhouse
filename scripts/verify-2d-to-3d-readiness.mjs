@@ -142,6 +142,14 @@ const openingRegressions = validateFloorplanDraft({
 assert(openingRegressions.issues.some(issue => issue.code === 'duplicate-wall-id'), 'Duplicate wall IDs must be detected.');
 assert(openingRegressions.issues.some(issue => issue.code === 'invalid-door-dimensions'), 'Non-positive door dimensions must be detected.');
 assert(openingRegressions.issues.some(issue => issue.code === 'window-not-associated-with-room'), 'Windows outside all rooms must be flagged for review.');
+assert(openingRegressions.metrics.roomGeometryValidRatio === 1, 'Spatial metrics must expose a perfect room geometry ratio for valid rooms.');
+assert(openingRegressions.metrics.wallGeometryValidRatio === 1, 'Spatial metrics must expose valid wall geometry ratio separately from duplicate IDs.');
+assert(openingRegressions.metrics.openingAssociationRatio === 0.5, 'Spatial metrics must report opening association ratio across doors and windows.');
+assert(openingRegressions.metrics.issuesByCode['duplicate-wall-id'] === 1, 'Spatial metrics must count diagnostics by stable issue code.');
+const emptyMetrics = validateFloorplanDraft({ rooms: [], walls: [], doors: [], windows: [] }).metrics;
+assert(emptyMetrics.roomGeometryValidRatio === null, 'Missing room evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.wallGeometryValidRatio === null, 'Missing wall evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.openingAssociationRatio === null, 'Missing opening evidence must be null, not a misleading zero ratio.');
 
 
 // Finalization must not silently discard structured diagnostics produced by
