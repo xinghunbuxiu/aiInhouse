@@ -204,6 +204,15 @@ assert(attachmentChecks.metrics.wallAttachedOpeningCount === 1, 'Only openings a
 assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4)), 'Wall attachment ratio must reflect all detected openings.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-review') === false, 'An opening already marked for attachment review should use the review diagnostic, not the missing-reference diagnostic.');
+const unlinkedOpening = validateFloorplanDraft({
+  rooms: [{ id: 'room-unlinked', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-unlinked', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
+  doors: [{ id: 'door-unlinked', x: 40, y: 0, width: 28, height: 8 }],
+  windows: []
+});
+assert(unlinkedOpening.reviewRequired, 'An opening with no verified wall reference must require review.');
+assert(unlinkedOpening.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-unlinked'), 'Unattached openings must receive a clear missing-wall diagnostic.');
 const evidenceTrace = validateFloorplanDraft({
   rooms: [{ id: 'evidence-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100, source: 'opencv-wall-grid', sourceEvidence: { imageBox: { x: 8, y: 12, width: 100, height: 90 }, candidateId: 'room-candidate-7' } }],
   walls: [{ id: 'evidence-wall', start: { x: 10, y: 10 }, end: { x: 10, y: 10 }, source: 'ml-wall', sourceEvidence: { imageSegmentId: 'segment-4', confidence: 0.51 } }],
