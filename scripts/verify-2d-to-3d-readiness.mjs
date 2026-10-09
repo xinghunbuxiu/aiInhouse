@@ -79,7 +79,7 @@ assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not
 assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
 assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
 assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
-const benchmarkAttachedCount = countVerifiedAttachedOpenings([
+const benchmarkAttachedCount = countBenchmarkAttachedOpenings([
   { id: 'known-good', attachedWallId: 'wall-1' },
   { id: 'no-wall-reference' },
   { id: 'stale-wall-reference', attachedWallId: 'wall-deleted' },
