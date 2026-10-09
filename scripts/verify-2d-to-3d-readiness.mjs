@@ -17,7 +17,13 @@ function assert(condition, message) {
   }
 }
 
-function assertThrows(fn, message) {\n  let threw = false;\n  try { fn(); } catch (_) { threw = true; }\n  assert(threw, message);\n}\n\nfunction makeTemplateOnlyPreprocess() {
+function assertThrows(fn, message) {
+  let threw = false;
+  try { fn(); } catch (_) { threw = true; }
+  assert(threw, message);
+}
+
+function makeTemplateOnlyPreprocess() {
   return {
     image: { width: 1000, height: 760 },
     quality: { score: 0.42, issues: ['no-stable-wall-grid'] },
