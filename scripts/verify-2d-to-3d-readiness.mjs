@@ -178,6 +178,8 @@ const invalidFinalizedDraft = finalizeRecognitionDraft({
 });
 assert(invalidFinalizedDraft.quality.needsReview, 'Spatial validation failures must force the recognition review gate.');
 assert(invalidFinalizedDraft.quality.spatialValidation.issueCount > 0, 'Finalized quality must expose spatial validation issue counts.');
+assert(invalidFinalizedDraft.quality.spatialValidation.metrics.roomGeometryValidRatio === 1, 'Finalized quality must expose spatial metrics to downstream consumers.');
+assert(invalidFinalizedDraft.quality.spatialValidation.metrics.reviewCount > 0, 'Finalized quality metrics must preserve review diagnostics.');
 
 
 
