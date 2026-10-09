@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { buildRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
+const { buildRecognitionDraft, assignOcrSemantics } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
 
 function assert(condition, message) {
@@ -62,6 +62,17 @@ function makeWallGridPreprocess() {
     }
   };
 }
+
+// Regression: a room label must never jump across a wall into a neighboring room.
+const adjacentRooms = assignOcrSemantics([
+  { id: 'elevator-shaft', name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.7 },
+  { id: 'bathroom', name: '空间B', type: 'space', x: 110, y: 0, width: 100, height: 100, confidence: 0.7 }
+], [
+  { text: '卫生间', x: 115, y: 40, width: 10, height: 20, confidence: 0.95 }
+]);
+assert(adjacentRooms[0].name === '空间A', 'OCR labels outside a room must not relabel that room.');
+assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not turn an elevator/adjacent space into a bathroom.');
+assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
 
 const job = {
   job: {
