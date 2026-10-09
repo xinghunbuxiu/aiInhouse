@@ -4529,7 +4529,16 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   );
   const spatialValidation = validateFloorplanDraft(repaired);
   const previousQuality = repaired.quality || {};
-  const issues = (repaired.issues || []).filter(issue => typeof issue === 'string');
+  // Keep legacy string issues and preserve structured diagnostics instead of silently dropping them.
+  const issues = (repaired.issues || []).map((issue) => {
+    if (typeof issue === 'string') return issue;
+    if (!issue || typeof issue !== 'object') return String(issue);
+    const severity = issue.severity ? `[${issue.severity}]` : '';
+    const code = issue.code || issue.message || 'recognition-issue';
+    const entity = issue.entityId ? ` (${issue.entityId})` : '';
+    const related = issue.relatedEntityId ? ` -> ${issue.relatedEntityId}` : '';
+    return `识别问题${severity}: ${code}${entity}${related}`;
+  });
   for (const issue of spatialValidation.issues) {
     issues.push(`空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
   }
