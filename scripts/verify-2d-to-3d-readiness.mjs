@@ -122,6 +122,15 @@ assert(!overlapping.valid, 'Zero-length walls must fail geometry validation.');
 assert(overlapping.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Overlapping room bounds must be flagged for review.');
 assert(overlapping.issues.some(issue => issue.code === 'door-not-associated-with-room'), 'Doors outside all rooms must be flagged.');
 
+const missingCoordinate = validateFloorplanDraft({
+  rooms: [{ id: 'missing-x', name: '客厅', type: 'living', x: null, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'missing-point', start: { x: null, y: 0 }, end: { x: 10, y: 0 } }],
+  doors: []
+});
+assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-room-bounds'), 'Null room coordinates must not be coerced to zero.');
+assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-wall-segment'), 'Null wall coordinates must be rejected.');
+
+
 // Finalization must not silently discard structured diagnostics produced by
 // upstream recognizers; downstream logs should retain their code and entity.
 const finalizedWithStructuredIssue = finalizeRecognitionDraft({
