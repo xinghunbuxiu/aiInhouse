@@ -49,8 +49,14 @@ function buildSpatialGraph(draft = {}) {
   for (let i = 0; i < rooms.length; i += 1) {
     for (let j = i + 1; j < rooms.length; j += 1) {
       const a = rooms[i], b = rooms[j];
-      const verticalGap = Math.max(0, Math.max(Number(a.y), Number(b.y)) - Math.min(Number(a.y) + Number(a.height), Number(b.y) + Number(b.height)));
-      const horizontalGap = Math.max(0, Math.max(Number(a.x), Number(b.x)) - Math.min(Number(a.x) + Number(a.width), Number(b.x) + Number(b.width)));
+      const verticalGap = Math.max(0,
+        Number(a.y) - (Number(b.y) + Number(b.height)),
+        Number(b.y) - (Number(a.y) + Number(a.height))
+      );
+      const horizontalGap = Math.max(0,
+        Number(a.x) - (Number(b.x) + Number(b.width)),
+        Number(b.x) - (Number(a.x) + Number(a.width))
+      );
       const verticalOverlap = Math.max(0, Math.min(Number(a.y) + Number(a.height), Number(b.y) + Number(b.height)) - Math.max(Number(a.y), Number(b.y)));
       const horizontalOverlap = Math.max(0, Math.min(Number(a.x) + Number(a.width), Number(b.x) + Number(b.width)) - Math.max(Number(a.x), Number(b.x)));
       const near = (horizontalGap <= 2 && verticalOverlap > 0) || (verticalGap <= 2 && horizontalOverlap > 0);
@@ -59,7 +65,7 @@ function buildSpatialGraph(draft = {}) {
           from: nodes[i].id,
           to: nodes[j].id,
           relation: 'adjacent',
-          sharedBoundaryLength: Number((verticalGap <= 2 ? verticalOverlap : horizontalOverlap).toFixed(2))
+          sharedBoundaryLength: Number((horizontalGap <= 2 ? verticalOverlap : horizontalOverlap).toFixed(2))
         });
       }
     }
