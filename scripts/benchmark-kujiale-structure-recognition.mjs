@@ -364,11 +364,13 @@ export function summarizeBenchmark(results) {
     failed: results.length - valid.length,
     withManifestLayout: withLayout.length,
     exactLayoutMatchCount: exactLayoutMatches.length,
-    exactLayoutMatchRate: Number((exactLayoutMatches.length / Math.max(1, withLayout.length) * 100).toFixed(1)),
+    // No labeled layouts means accuracy is unknown, not 0%.
+    exactLayoutMatchRate: withLayout.length ? Number((exactLayoutMatches.length / withLayout.length * 100).toFixed(1)) : null,
     avgLayoutAccuracy: avg(withLayout.map((row) => row.layoutCompare?.layoutAccuracy)),
     avgReadinessScore: avg(readinessRows.map((row) => row.score)),
     commercialReadyCount: readinessRows.filter((row) => row.status === 'commercial_ready').length,
-    commercialReadyRate: Number((readinessRows.filter((row) => row.status === 'commercial_ready').length / Math.max(1, valid.length) * 100).toFixed(1)),
+    // No successfully evaluated samples means readiness rate is unknown, not 0%.
+    commercialReadyRate: valid.length ? Number((readinessRows.filter((row) => row.status === 'commercial_ready').length / valid.length * 100).toFixed(1)) : null,
     needsHumanReviewCount: readinessRows.filter((row) => row.status === 'needs_human_review').length,
     blockedCount: readinessRows.filter((row) => row.status === 'blocked').length,
     avgAttachedOpeningRatio: avg(valid.map((row) => row.attachedOpeningRatio)),
@@ -418,9 +420,9 @@ function writeMarkdownReport(filePath, report) {
 - 视图: ${report.viewKey}
 - 样本数: ${report.aggregate.total}
 - 有 manifest 布局 GT: ${report.aggregate.withManifestLayout}
-- 布局完全匹配率: ${report.aggregate.exactLayoutMatchRate}%
+- 布局完全匹配率: ${report.aggregate.exactLayoutMatchRate == null ? 'N/A（无标注布局真值）' : `${report.aggregate.exactLayoutMatchRate}%`}
 - 平均布局准确率(四类): ${report.aggregate.avgLayoutAccuracy}
-- 商用就绪率: ${report.aggregate.commercialReadyRate}%
+- 商用就绪率: ${report.aggregate.commercialReadyRate == null ? 'N/A（无有效评估样本）' : `${report.aggregate.commercialReadyRate}%`}
 - 平均商用分: ${report.aggregate.avgReadinessScore}
 - 平均门窗贴墙率（需明确引用有效墙体）: ${report.aggregate.avgAttachedOpeningRatio}
 - 空间校验需复核样本数: ${report.aggregate.spatialValidationReviewCount}
@@ -484,8 +486,16 @@ async function main() {
 
   ensureDir(outputRoot);
   const manifestIndex = buildManifestIndex();
-  const samples = collectStructureSamples(dataRoot, viewKey).slice(0, Number.isFinite(limit) ? limit : undefined);
-  const results = [];
+  const discoveredSamples = collectStructureSamples(dataRoot, viewKey);
+  if (discoveredSamples.length === 0) {
+    const expectedViewFiles = VIEW_KEYS.map((key) => `*/views/${key}.jpg`).join(', ');
+    throw new Error(
+      `No benchmark samples found for view "${viewKey}" under "${dataRoot}". ` +
+      `Expected files like ${expectedViewFiles}. Check --data-root, download the Kujiale structure views first, or choose a view with existing samples.`
+    );
+  }
+  const samples = discoveredSamples.slice(0, Number.isFinite(limit) ? limit : undefined);
+  const results = []
 
   for (const [index, sample] of samples.entries()) {
     const manifest = manifestIndex.get(sample.designId) || null;
