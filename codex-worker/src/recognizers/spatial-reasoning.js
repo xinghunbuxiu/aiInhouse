@@ -153,10 +153,51 @@ function validateFloorplanDraft(draft = {}) {
       }
     }
   }
+  // Keep evidence-backed metrics separate from the hard readiness gate.
+  // A missing category is null (not 0), so absent detections are not mistaken
+  // for a measured 0% success rate.
+  const roomGeometryValidCount = rooms.filter(room =>
+    [room.x, room.y, room.width, room.height].every(finite)
+      && Number(room.width) > 0 && Number(room.height) > 0
+  ).length;
+  const wallGeometryValidCount = walls.filter(wall =>
+    point(wall.start) && point(wall.end) && segmentLength(wall) >= 2
+  ).length;
+  const openings = [...doors, ...windows];
+  const associatedOpeningCount = openings.filter(opening => {
+    const p = opening.center || opening.position || opening;
+    return point(p) && rooms.some(room => pointInRoom(p, room, 3));
+  }).length;
+  const bySeverity = issues.reduce((counts, issue) => {
+    counts[issue.severity] = (counts[issue.severity] || 0) + 1;
+    return counts;
+  }, {});
+  const byCode = issues.reduce((counts, issue) => {
+    counts[issue.code] = (counts[issue.code] || 0) + 1;
+    return counts;
+  }, {});
+  const ratio = (count, total) => total > 0 ? Number((count / total).toFixed(4)) : null;
+  const metrics = {
+    roomCount: rooms.length,
+    roomGeometryValidCount,
+    roomGeometryValidRatio: ratio(roomGeometryValidCount, rooms.length),
+    wallCount: walls.length,
+    wallGeometryValidCount,
+    wallGeometryValidRatio: ratio(wallGeometryValidCount, walls.length),
+    openingCount: openings.length,
+    associatedOpeningCount,
+    openingAssociationRatio: ratio(associatedOpeningCount, openings.length),
+    issueCount: issues.length,
+    errorCount: bySeverity.error || 0,
+    reviewCount: bySeverity.review || 0,
+    issuesBySeverity: bySeverity,
+    issuesByCode: byCode
+  };
   return {
     valid: !issues.some(issue => issue.severity === 'error'),
     reviewRequired: issues.some(issue => issue.severity === 'review'),
     issues,
+    metrics,
     graph: buildSpatialGraph(draft)
   };
 }
