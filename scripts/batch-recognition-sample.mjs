@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -117,6 +117,14 @@ function runPreprocess(jobFile, outputDir) {
   }
 }
 
+export function countVerifiedAttachedOpenings(openings = [], walls = []) {
+  const wallIds = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  return openings.filter((item) => {
+    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
+    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
+  }).length;
+}
+
 function evaluateImage(filePath, outputDir) {
   fs.mkdirSync(outputDir, { recursive: true });
   const jobFile = writeJob(filePath, outputDir);
@@ -127,11 +135,7 @@ function evaluateImage(filePath, outputDir) {
   const repaired = repairRecognitionTopology(draft);
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
   const readiness = repaired.quality?.commercialReadiness || {};
-  const wallIds = new Set((repaired.walls || []).map((wall, index) => String(wall.id || `wall-${index + 1}`)));
-  const verifiedAttachedOpenings = openings.filter((item) => {
-    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
-    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
-  }).length;
+  const verifiedAttachedOpenings = countVerifiedAttachedOpenings(openings, repaired.walls || []);
   const attachedOpeningRatio = openings.length ? verifiedAttachedOpenings / openings.length : null;
 
   return {
@@ -176,48 +180,55 @@ function summarize(results) {
   };
 }
 
-const limit = Number(getArg('--limit', '12')) || 12;
-const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
-const discoveredImages = collectCandidates();
-if (discoveredImages.length === 0) {
-  throw new Error(
-    'No floor-plan images found for batch recognition. Check backend/uploads/floorplans/kujiale(-xinfu), or add one of the configured local upload images before running this script.'
-  );
-}
-const images = discoveredImages.slice(0, limit);
-fs.mkdirSync(outputRoot, { recursive: true });
-
-const results = [];
-for (const image of images) {
-  const outDir = path.join(outputRoot, slugify(image));
-  const started = Date.now();
-  try {
-    const row = evaluateImage(image, outDir);
-    results.push({ ...row, durationMs: Date.now() - started });
-    process.stderr.write(`OK ${path.basename(image)} -> ${row.readinessStatus}:${row.readinessScore} rooms=${row.rooms}\n`);
-  } catch (error) {
-    results.push({
-      image,
-      name: path.basename(image),
-      error: error.message,
-      durationMs: Date.now() - started
-    });
-    process.stderr.write(`ERR ${path.basename(image)} -> ${error.message}\n`);
+function main() {
+  const limit = Number(getArg('--limit', '12')) || 12;
+  const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
+  const discoveredImages = collectCandidates();
+  if (discoveredImages.length === 0) {
+    throw new Error(
+      'No floor-plan images found for batch recognition. Check backend/uploads/floorplans/kujiale(-xinfu), or add one of the configured local upload images before running this script.'
+    );
   }
+  const images = discoveredImages.slice(0, limit);
+  fs.mkdirSync(outputRoot, { recursive: true });
+
+  const results = [];
+  for (const image of images) {
+    const outDir = path.join(outputRoot, slugify(image));
+    const started = Date.now();
+    try {
+      const row = evaluateImage(image, outDir);
+      results.push({ ...row, durationMs: Date.now() - started });
+      process.stderr.write(`OK ${path.basename(image)} -> ${row.readinessStatus}:${row.readinessScore} rooms=${row.rooms}\n`);
+    } catch (error) {
+      results.push({
+        image,
+        name: path.basename(image),
+        error: error.message,
+        durationMs: Date.now() - started
+      });
+      process.stderr.write(`ERR ${path.basename(image)} -> ${error.message}\n`);
+    }
+  }
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    aggregate: summarize(results),
+    results
+  };
+
+  fs.writeFileSync(path.join(outputRoot, 'summary.json'), JSON.stringify(report, null, 2), 'utf8');
+  console.log(JSON.stringify(report.aggregate, null, 2));
+  for (const row of results) {
+    if (row.error) {
+      console.log(`- ${row.name}: ERROR ${row.error}`);
+      continue;
+    }
+    console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${row.attachedOpeningRatio == null ? 'N/A' : `${(row.attachedOpeningRatio * 100).toFixed(0)}%`}`);
+  }
+
 }
 
-const report = {
-  generatedAt: new Date().toISOString(),
-  aggregate: summarize(results),
-  results
-};
-
-fs.writeFileSync(path.join(outputRoot, 'summary.json'), JSON.stringify(report, null, 2), 'utf8');
-console.log(JSON.stringify(report.aggregate, null, 2));
-for (const row of results) {
-  if (row.error) {
-    console.log(`- ${row.name}: ERROR ${row.error}`);
-    continue;
-  }
-  console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${row.attachedOpeningRatio == null ? 'N/A' : `${(row.attachedOpeningRatio * 100).toFixed(0)}%`}`);
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  main();
 }
