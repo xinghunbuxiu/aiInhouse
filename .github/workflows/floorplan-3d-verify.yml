@@ -1,0 +1,20 @@
+name: Floorplan to 3D verification
+
+on:
+  push:
+    branches: [main, "improve/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:2d3d
+      - run: npm run build
