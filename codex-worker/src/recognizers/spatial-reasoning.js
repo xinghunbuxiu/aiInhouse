@@ -94,6 +94,7 @@ function validateFloorplanDraft(draft = {}) {
   const rooms = Array.isArray(draft.rooms) ? draft.rooms : [];
   const walls = Array.isArray(draft.walls) ? draft.walls : [];
   const doors = Array.isArray(draft.doors) ? draft.doors : [];
+  const windows = Array.isArray(draft.windows) ? draft.windows : [];
   const ids = new Set();
   rooms.forEach((room, index) => {
     const id = String(room.id || `room-${index + 1}`);
@@ -106,24 +107,41 @@ function validateFloorplanDraft(draft = {}) {
       issues.push({ code: 'room-semantics-unconfirmed', severity: 'review', entityId: id });
     }
   });
+  const wallIds = new Set();
   walls.forEach((wall, index) => {
     const id = String(wall.id || `wall-${index + 1}`);
+    if (wallIds.has(id)) issues.push({ code: 'duplicate-wall-id', severity: 'error', entityId: id });
+    wallIds.add(id);
     if (!point(wall.start) || !point(wall.end) || segmentLength(wall) < 2) {
       issues.push({ code: 'invalid-wall-segment', severity: 'error', entityId: id });
     }
-  });
-  doors.forEach((door, index) => {
-    const id = String(door.id || `door-${index + 1}`);
-    const p = door.center || door.position || door;
-    if (!point(p)) {
-      issues.push({ code: 'door-position-missing', severity: 'review', entityId: id });
-      return;
-    }
-    const roomsContainingDoor = rooms.filter(room => pointInRoom(p, room, 3));
-    if (roomsContainingDoor.length === 0) {
-      issues.push({ code: 'door-not-associated-with-room', severity: 'review', entityId: id });
+    if (wall.thickness !== undefined && (!finite(wall.thickness) || Number(wall.thickness) <= 0)) {
+      issues.push({ code: 'invalid-wall-thickness', severity: 'review', entityId: id });
     }
   });
+  const validateOpenings = (items, kind) => {
+    const openingIds = new Set();
+    items.forEach((opening, index) => {
+      const id = String(opening.id || `${kind}-${index + 1}`);
+      if (openingIds.has(id)) issues.push({ code: `duplicate-${kind}-id`, severity: 'error', entityId: id });
+      openingIds.add(id);
+      const p = opening.center || opening.position || opening;
+      if (!point(p)) {
+        issues.push({ code: `${kind}-position-missing`, severity: 'review', entityId: id });
+        return;
+      }
+      if ((opening.width !== undefined && (!finite(opening.width) || Number(opening.width) <= 0))
+        || (opening.height !== undefined && (!finite(opening.height) || Number(opening.height) <= 0))) {
+        issues.push({ code: `invalid-${kind}-dimensions`, severity: 'review', entityId: id });
+      }
+      const roomsContainingOpening = rooms.filter(room => pointInRoom(p, room, 3));
+      if (roomsContainingOpening.length === 0) {
+        issues.push({ code: `${kind}-not-associated-with-room`, severity: 'review', entityId: id });
+      }
+    });
+  };
+  validateOpenings(doors, 'door');
+  validateOpenings(windows, 'window');
   for (let i = 0; i < rooms.length; i += 1) {
     for (let j = i + 1; j < rooms.length; j += 1) {
       const a = rooms[i], b = rooms[j];
