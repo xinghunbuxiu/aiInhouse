@@ -179,6 +179,9 @@ function validateFloorplanDraft(draft = {}) {
     }
     if (!attachedWallId) {
       issues.push({ code: 'opening-wall-attachment-missing', severity: 'review', entityId: id });
+      if (opening.needsWallAttachmentReview) {
+        issues.push({ code: 'opening-wall-attachment-review', severity: 'review', entityId: id });
+      }
       return;
     }
     if (!opening.needsWallAttachmentReview) {
