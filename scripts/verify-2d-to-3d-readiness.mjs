@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { countVerifiedAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
+import { countVerifiedAttachedOpenings as countBenchmarkAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
+import { countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
 
 const require = createRequire(import.meta.url);
 const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
@@ -85,6 +86,12 @@ const benchmarkAttachedCount = countVerifiedAttachedOpenings([
   { id: 'pending-review', attachedWallId: 'wall-1', needsWallAttachmentReview: true }
 ], [{ id: 'wall-1' }]);
 assert(benchmarkAttachedCount === 1, 'Benchmark must count only openings with an explicit existing wall reference and no review flag.');
+assert(countBatchAttachedOpenings([
+  { id: 'verified', attachedWallId: 'w1' },
+  { id: 'missing-ref' },
+  { id: 'unknown-ref', attachedWallId: 'w404' },
+  { id: 'review', attachedWallId: 'w1', needsWallAttachmentReview: true }
+], [{ id: 'w1' }]) === 1, 'Batch evaluation must count only openings explicitly attached to an existing wall and not flagged for review.');
 
 const noGroundTruthSummary = summarizeBenchmark([{
   error: null,
