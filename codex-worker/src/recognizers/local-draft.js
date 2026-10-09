@@ -130,11 +130,14 @@ function assignOcrSemantics(geometryRooms = [], ocrCandidates = []) {
       }
       const inside = roomContainsPoint(room, label.center);
       const distance = Math.hypot(roomCenterPoint.x - label.center.x, roomCenterPoint.y - label.center.y);
-      const maxDistance = Math.hypot(toNumber(room.width), toNumber(room.height)) * 0.75;
-      if (!inside && distance > maxDistance) {
+
+      // Room semantics must come from a label physically inside that room.
+      // Distance-only matching caused labels in elevator shafts, corridors, or
+      // neighboring rooms to leak across boundaries and misclassify the room.
+      if (!inside) {
         continue;
       }
-      const score = (inside ? 2 : 0) + Math.max(0, 1 - distance / Math.max(maxDistance, 1)) + label.confidence * 0.3;
+      const score = 2 + label.confidence * 0.3 - distance / Math.max(Math.hypot(toNumber(room.width), toNumber(room.height)), 1);
       if (!best || score > best.score) {
         best = { label, score, distance, inside };
       }
