@@ -42,47 +42,93 @@ function getImageMeta(filePath) {
 }
 
 function buildCompressedImage(sourcePath, outputDir) {
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
+  if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
     return {
       preprocessedImagePath: '',
-      operations: ['missing-source']
+      operations: ['missing-source'],
+      beforeSizeBytes: 0,
+      afterSizeBytes: 0,
+      beforeWidth: 0,
+      beforeHeight: 0,
+      afterWidth: 0,
+      afterHeight: 0
     };
   }
 
   const targetFile = path.join(outputDir, 'recognition-input.jpg');
   const beforeSize = getFileSize(sourcePath);
   const metaBefore = getImageMeta(sourcePath);
-  const result = run('sips', [
-    '-s', 'format', 'jpeg',
-    '-s', 'formatOptions', '75',
-    '-Z', '1400',
-    sourcePath,
-    '--out', targetFile
-  ]);
 
-  if (result.status !== 0) {
-    return {
-      preprocessedImagePath: sourcePath,
-      operations: ['sips-failed-use-source'],
-      beforeSizeBytes: beforeSize,
-      afterSizeBytes: beforeSize,
-      beforeWidth: metaBefore.width,
-      beforeHeight: metaBefore.height,
-      afterWidth: metaBefore.width,
-      afterHeight: metaBefore.height
-    };
+  // Prefer Pillow for a portable implementation on Linux/macOS/Windows.
+  // EXIF orientation is applied before resizing so OCR and geometry use the
+  // same visual coordinate system. If Pillow is unavailable, retain the
+  // existing macOS sips path, then safely fall back to the original file.
+  const pythonScript = [
+    'import sys',
+    'try:',
+    ' from PIL import Image, ImageOps',
+    ' image = Image.open(sys.argv[1])',
+    ' image = ImageOps.exif_transpose(image).convert("RGB")',
+    ' image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)',
+    ' image.save(sys.argv[2], "JPEG", quality=75, optimize=True)',
+    ' print(f"{image.width}x{image.height}")',
+    'except Exception as exc:',
+    ' print(str(exc), file=sys.stderr)',
+    ' sys.exit(1)'
+  ].join('\n');
+  const pythonNames = process.platform === 'win32' ? ['python', 'py'] : ['python3', 'python'];
+  for (const python of pythonNames) {
+    const result = run(python, ['-c', pythonScript, sourcePath, targetFile]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const dimensions = String(result.stdout || '').match(/(\d+)x(\d+)/);
+      const metaAfter = dimensions
+        ? { width: Number(dimensions[1]), height: Number(dimensions[2]) }
+        : getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['exif-orientation-corrected', 'resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'portable-python-pillow'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
   }
 
-  const metaAfter = getImageMeta(targetFile);
+  if (process.platform === 'darwin') {
+    const result = run('sips', [
+      '-s', 'format', 'jpeg',
+      '-s', 'formatOptions', '75',
+      '-Z', '1400',
+      sourcePath,
+      '--out', targetFile
+    ]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const metaAfter = getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'macos-sips-fallback'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
+  }
+
   return {
-    preprocessedImagePath: targetFile,
-    operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75'],
+    preprocessedImagePath: sourcePath,
+    operations: ['portable-preprocess-unavailable-use-source'],
     beforeSizeBytes: beforeSize,
-    afterSizeBytes: getFileSize(targetFile),
+    afterSizeBytes: beforeSize,
     beforeWidth: metaBefore.width,
     beforeHeight: metaBefore.height,
-    afterWidth: metaAfter.width,
-    afterHeight: metaAfter.height
+    afterWidth: metaBefore.width,
+    afterHeight: metaBefore.height
   };
 }
 
