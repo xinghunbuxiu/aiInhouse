@@ -3,7 +3,10 @@
 // Deterministic spatial reasoning primitives. These functions do not invent
 // geometry; they expose relationships and contradictions in an existing draft.
 function finite(value) {
-  return Number.isFinite(Number(value));
+  return value !== null
+    && value !== undefined
+    && value !== ''
+    && Number.isFinite(Number(value));
 }
 
 function point(value) {
