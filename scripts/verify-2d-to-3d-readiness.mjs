@@ -204,7 +204,7 @@ assert(attachmentChecks.metrics.wallAttachedOpeningCount === 1, 'Only openings a
 assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4)), 'Wall attachment ratio must reflect all detected openings.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
-assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-review') === false, 'An opening already marked for attachment review should use the review diagnostic, not the missing-reference diagnostic.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-review'), 'An opening under review without a wall reference must also explain that the attachment is missing.');
 const unlinkedOpening = validateFloorplanDraft({
   rooms: [{ id: 'room-unlinked', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [{ id: 'wall-unlinked', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
