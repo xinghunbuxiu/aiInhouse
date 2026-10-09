@@ -14,7 +14,7 @@ const {
   projectRoot
 } = require('../config');
 const { getRecognitionDraftFile } = require('./external-command');
-const { buildRecognitionPrompt, buildRecognitionProbePrompt } = require('./prompt-builder');
+const { buildRecognitionPrompt } = require('./prompt-builder');
 const { getRecognitionDraftSchema } = require('./schema');
 
 function splitCommand(command) {
@@ -315,6 +315,10 @@ function scoreRecognitionQuality(draft) {
   return Number((roomScore + wallScore + openingScore + confidenceScore).toFixed(2));
 }
 
+function buildRecoveryPrompt(basePrompt, firstDraft) {
+  return `${basePrompt}\n\n第一次识别结果需要复核。请重新检查原图和几何证据，重点修正以下初稿中的错误，而不是简单重复初稿。\n复核要求：\n- 先核对墙线、房间边界和门窗位置，再判断空间用途。\n- OCR 标签只能分配给标签中心点实际位于其内部的空间。\n- 不得把电梯井、管道井、设备平台或入户玄关误判成卫生间/卧室。\n- 不得为了满足常见户型模板而新增无证据房间。\n- 如果证据不足，保留“未确认空间”，并降低置信度、说明 issues。\n- 输出完整且符合指定 JSON Schema 的 recognition-draft，不要输出解释。\n\n初次识别结果：\n${JSON.stringify(firstDraft, null, 2)}`;
+}
+
 function normalizeRecognitionDraft(result, fallbackDraft = {}, probe = null) {
   const base = result && typeof result === 'object' ? result : {};
   const normalized = {
@@ -497,40 +501,55 @@ async function runAiRecognition(job, outputDir, options = {}) {
   fs.writeFileSync(schemaFile, JSON.stringify(schema, null, 2), 'utf8');
 
   if (recognitionApiBaseUrl && recognitionApiKey) {
-    const probePrompt = buildRecognitionProbePrompt({
-      floorPlan: {
-        id: job?.floor_plan?.id,
-        name: job?.floor_plan?.name,
-        imageUrl: job?.floor_plan?.image_url || ''
-      },
-      preprocessing: options.preprocessing || null
-    });
-    // Keep the normal path to one vision-model request. The previous flow
-    // always ran a probe request and then a full recognition request, doubling
-    // latency and API cost even when the first result was already good.
     const apiResult = await runApiRecognition(prompt, schema, outputDir, options);
     let normalized = normalizeRecognitionDraft(apiResult, options.fallbackDraft || {}, null);
 
-    // Probe only weak/ambiguous results. This second pass is a recovery path,
-    // not a mandatory preflight call for every floor plan.
+    // Normal-quality results use one model call. Only weak results enter a
+    // schema-constrained repair pass that receives the first draft as evidence.
     if (normalized.quality?.needsReview) {
-      const probeResult = await runApiProbe(probePrompt, outputDir, options).catch(() => null);
-      if (probeResult) {
-        normalized = normalizeRecognitionDraft(apiResult, options.fallbackDraft || {}, probeResult);
+      normalized.quality = {
+        ...(normalized.quality || {}),
+        recoveryAttempted: true,
+        recoveryAccepted: false
+      };
+      try {
+        const recoveryPrompt = buildRecoveryPrompt(prompt, normalized);
+        const recoveryResult = await runApiRecognition(recoveryPrompt, schema, outputDir, options);
+        if (recoveryResult) {
+          const recovered = normalizeRecognitionDraft(recoveryResult, options.fallbackDraft || {}, null);
+          const hasUsableStructure = recovered.rooms.length >= 2 && recovered.walls.length >= 4;
+          const notMateriallyWorse = recovered.quality.score >= normalized.quality.score - 0.05;
+          if (hasUsableStructure && notMateriallyWorse) {
+            normalized = {
+              ...recovered,
+              quality: {
+                ...(recovered.quality || {}),
+                recoveryAttempted: true,
+                recoveryAccepted: true
+              }
+            };
+          } else {
+            normalized.quality = {
+              ...(normalized.quality || {}),
+              recoveryAttempted: true,
+              recoveryAccepted: false,
+              recoveryRejectedReason: !hasUsableStructure ? 'incomplete-geometry' : 'quality-regressed'
+            };
+          }
+        }
+      } catch (error) {
         normalized.quality = {
           ...(normalized.quality || {}),
-          probeUsed: true
-        };
-      } else {
-        normalized.quality = {
-          ...(normalized.quality || {}),
-          probeUsed: false
+          recoveryAttempted: true,
+          recoveryAccepted: false,
+          recoveryError: String(error.message || error).slice(0, 240)
         };
       }
     } else {
       normalized.quality = {
         ...(normalized.quality || {}),
-        probeUsed: false
+        recoveryAttempted: false,
+        recoveryAccepted: false
       };
     }
 
@@ -632,5 +651,7 @@ async function runAiRecognition(job, outputDir, options = {}) {
 }
 
 module.exports = {
-  runAiRecognition
+  runAiRecognition,
+  buildRecoveryPrompt,
+  normalizeRecognitionDraft
 };
