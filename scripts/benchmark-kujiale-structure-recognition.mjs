@@ -274,8 +274,16 @@ export function evaluateStructureSample(sample, manifest, options) {
 
   const rooms = repaired.rooms || [];
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
-  const attachedOpeningCount = openings.filter((item) => !item.needsWallAttachmentReview).length;
+  const wallIds = new Set((repaired.walls || []).map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  // Count an opening as attached only when it explicitly references an existing
+  // wall and is not awaiting review. Merely lacking a review flag is not proof.
+  const attachedOpeningCount = openings.filter((item) => {
+    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
+    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
+  }).length;
   const attachedOpeningRatio = openings.length ? attachedOpeningCount / openings.length : null;
+  const spatialValidation = repaired.quality?.spatialValidation || {};
+  const spatialMetrics = spatialValidation.metrics || {};
   const readiness = repaired.quality?.commercialReadiness || {};
   const expected = manifest?.expected || parseLayoutText('');
   const recognized = countRecognizedLayout(rooms);
@@ -304,7 +312,19 @@ export function evaluateStructureSample(sample, manifest, options) {
     readinessStatus: readiness.status || 'unknown',
     readinessScore: readiness.score ?? null,
     blockingReasons: readiness.blockingReasons || [],
+    attachedOpeningCount,
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(3)),
+    spatialValidation: {
+      valid: spatialValidation.valid ?? null,
+      reviewRequired: spatialValidation.reviewRequired ?? null,
+      issueCount: spatialValidation.issueCount ?? spatialMetrics.issueCount ?? null,
+      errorCount: spatialValidation.errorCount ?? spatialMetrics.errorCount ?? null,
+      reviewCount: spatialValidation.reviewCount ?? spatialMetrics.reviewCount ?? null,
+      roomGeometryValidRatio: spatialMetrics.roomGeometryValidRatio ?? null,
+      wallGeometryValidRatio: spatialMetrics.wallGeometryValidRatio ?? null,
+      openingAssociationRatio: spatialMetrics.openingAssociationRatio ?? null,
+      wallAttachmentRatio: spatialMetrics.wallAttachmentRatio ?? null
+    },
     geometry,
     outputDir,
     durationMs: Date.now() - started,
@@ -349,6 +369,13 @@ export function summarizeBenchmark(results) {
     needsHumanReviewCount: readinessRows.filter((row) => row.status === 'needs_human_review').length,
     blockedCount: readinessRows.filter((row) => row.status === 'blocked').length,
     avgAttachedOpeningRatio: avg(valid.map((row) => row.attachedOpeningRatio)),
+    spatialValidationReviewCount: valid.filter((row) => row.spatialValidation?.reviewRequired).length,
+    spatialValidationInvalidCount: valid.filter((row) => row.spatialValidation?.valid === false).length,
+    avgRoomGeometryValidRatio: avg(valid.map((row) => row.spatialValidation?.roomGeometryValidRatio)),
+    avgWallGeometryValidRatio: avg(valid.map((row) => row.spatialValidation?.wallGeometryValidRatio)),
+    avgOpeningAssociationRatio: avg(valid.map((row) => row.spatialValidation?.openingAssociationRatio)),
+    avgWallAttachmentRatio: avg(valid.map((row) => row.spatialValidation?.wallAttachmentRatio)),
+    avgSpatialIssueCount: avg(valid.map((row) => row.spatialValidation?.issueCount)),
     avgMainRoomCountDelta: avg(withLayout.map((row) => row.layoutCompare?.deltas?.mainRoomCount)),
     avgWallRecallProxy: avg(recallRows.map((row) => row.wallRecall)),
     avgRoomRecallProxy: avg(recallRows.map((row) => row.roomRecall)),
@@ -392,7 +419,14 @@ function writeMarkdownReport(filePath, report) {
 - 平均布局准确率(四类): ${report.aggregate.avgLayoutAccuracy}
 - 商用就绪率: ${report.aggregate.commercialReadyRate}%
 - 平均商用分: ${report.aggregate.avgReadinessScore}
-- 平均门窗贴墙率: ${report.aggregate.avgAttachedOpeningRatio}
+- 平均门窗贴墙率（需明确引用有效墙体）: ${report.aggregate.avgAttachedOpeningRatio}
+- 空间校验需复核样本数: ${report.aggregate.spatialValidationReviewCount}
+- 空间校验无效样本数: ${report.aggregate.spatialValidationInvalidCount}
+- 平均房间几何有效率: ${report.aggregate.avgRoomGeometryValidRatio}
+- 平均墙体几何有效率: ${report.aggregate.avgWallGeometryValidRatio}
+- 平均洞口房间关联率: ${report.aggregate.avgOpeningAssociationRatio}
+- 平均洞口墙体关联率: ${report.aggregate.avgWallAttachmentRatio}
+- 平均空间诊断问题数: ${report.aggregate.avgSpatialIssueCount}
 
 ## 几何召回代理指标
 
