@@ -53,7 +53,7 @@ function buildSpatialGraph(draft = {}) {
       const horizontalGap = Math.max(0, Math.max(Number(a.x), Number(b.x)) - Math.min(Number(a.x) + Number(a.width), Number(b.x) + Number(b.width)));
       const verticalOverlap = Math.max(0, Math.min(Number(a.y) + Number(a.height), Number(b.y) + Number(b.height)) - Math.max(Number(a.y), Number(b.y)));
       const horizontalOverlap = Math.max(0, Math.min(Number(a.x) + Number(a.width), Number(b.x) + Number(b.width)) - Math.max(Number(a.x), Number(b.x)));
-      const near = (verticalGap <= 2 && verticalOverlap > 0) || (horizontalGap <= 2 && horizontalOverlap > 0);
+      const near = (horizontalGap <= 2 && verticalOverlap > 0) || (verticalGap <= 2 && horizontalOverlap > 0);
       if (near) {
         edges.push({
           from: nodes[i].id,
