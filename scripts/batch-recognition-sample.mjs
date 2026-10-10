@@ -189,6 +189,31 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     roomNames: (repaired.rooms || []).map((room) => room.name || room.id),
     walls: (repaired.walls || []).length,
     openings: openings.length,
+    visualEvidence: {
+      preprocessingQualityScore: preprocessing.quality?.score ?? null,
+      doorSymbolCandidateCount: preprocessing.geometryCandidates?.doorSymbolCandidateCount ?? 0,
+      windowSymbolCandidateCount: preprocessing.geometryCandidates?.windowSymbolCandidateCount ?? 0,
+      doorSymbolCandidates: (preprocessing.geometryCandidates?.doorSymbolCandidates || []).map((candidate) => ({
+        confidence: candidate.confidence ?? null,
+        orientation: candidate.orientation || '',
+        source: candidate.source || '',
+        assetMatched: Boolean(candidate.assetMatch?.assetId),
+        hasWallSupport: Boolean(candidate.wallCandidateId || candidate.leftSupport || candidate.rightSupport)
+      })),
+      windowSymbolCandidates: (preprocessing.geometryCandidates?.windowSymbolCandidates || []).map((candidate) => ({
+        confidence: candidate.confidence ?? null,
+        orientation: candidate.orientation || '',
+        source: candidate.source || '',
+        acceptedAsExteriorWindow: Boolean(candidate.acceptedAsExteriorWindow),
+        proposed: Boolean(candidate.proposedStrongWallWindowCandidate || candidate.proposedRawBalconyWindowCandidate),
+        assetMatched: Boolean(candidate.assetMatch?.assetId)
+      })),
+      acceptedDoorCount: repaired.quality?.acceptedDoorSymbolCandidateCount ?? 0,
+      visualDoorCandidateCount: repaired.quality?.visualDoorCandidateCount ?? 0,
+      acceptedWindowCount: repaired.quality?.acceptedWindowSymbolCandidateCount ?? 0,
+      proposedWindowCount: repaired.quality?.proposedWindowSymbolCandidateCount ?? 0,
+      visualWindowCandidateCount: repaired.quality?.visualWindowCandidateCount ?? 0
+    },
     openingEvidence: {
       confirmedCount: confirmedOpenings.length,
       proposedCount: proposedOpenings.length,
@@ -241,6 +266,10 @@ function summarize(results) {
     commercialReady: ready.length,
     needsHumanReview: review.length,
     blocked: blocked.length,
+    doorSymbolCandidates: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.doorSymbolCandidateCount || 0), 0),
+    windowSymbolCandidates: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.windowSymbolCandidateCount || 0), 0),
+    acceptedVisualDoors: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.acceptedDoorCount || 0), 0),
+    acceptedVisualWindows: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.acceptedWindowCount || 0), 0),
     confirmedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.confirmedCount || 0), 0),
     proposedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.proposedCount || 0), 0),
     suppressedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.suppressedCount || 0), 0),
