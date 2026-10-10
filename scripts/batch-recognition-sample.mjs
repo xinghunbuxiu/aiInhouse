@@ -170,6 +170,21 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     roomNames: (repaired.rooms || []).map((room) => room.name || room.id),
     walls: (repaired.walls || []).length,
     openings: openings.length,
+    openingEvidence: {
+      confirmedCount: readiness.metrics?.confirmedOpeningCount ?? null,
+      proposedCount: readiness.metrics?.proposedOpeningCount ?? null,
+      suppressedCount: repaired.topology?.suppressedOpeningCount ?? 0,
+      bySource: openings.reduce((counts, opening) => {
+        const source = opening.source || 'unknown';
+        counts[source] = (counts[source] || 0) + 1;
+        return counts;
+      }, {}),
+      proposedIds: openings
+        .filter((opening) => opening.sourceEvidence?.needsVisualConfirmation
+          || opening.source === 'semantic-room-opening-prior')
+        .map((opening) => opening.id || null),
+      suppressed: repaired.topology?.suppressedOpenings || []
+    },
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
     readinessStatus: readiness.status || 'unknown',
     readinessScore: readiness.score ?? null,
@@ -206,6 +221,10 @@ function summarize(results) {
     commercialReady: ready.length,
     needsHumanReview: review.length,
     blocked: blocked.length,
+    confirmedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.confirmedCount || 0), 0),
+    proposedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.proposedCount || 0), 0),
+    suppressedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.suppressedCount || 0), 0),
+    spatialReviewRequired: valid.filter((row) => row.spatialValidation?.reviewRequired).length,
     commercialReadyRate: valid.length ? Number((ready.length / valid.length * 100).toFixed(1)) : null,
     avgReadinessScore: Number((valid.reduce((sum, row) => sum + Number(row.readinessScore || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgGeometryConfidence: Number((valid.reduce((sum, row) => sum + Number(row.geometryConfidence || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
