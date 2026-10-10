@@ -1741,18 +1741,39 @@ print(json.dumps({
     'python'
   ].filter(Boolean);
 
-  for (const command of pythonCommands) {
+  const attempts = [];
+  for (const command of [...new Set(pythonCommands)]) {
     const result = run(command, [scriptPath, sourcePath, outputDir], { timeout: 45000 });
     if (result.status === 0 && result.stdout.trim()) {
       try {
-        return JSON.parse(result.stdout.trim());
+        const parsed = JSON.parse(result.stdout.trim());
+        if (parsed.available) return { ...parsed, pythonCommand: command };
+        attempts.push({ command, error: parsed.error || 'vision_unavailable' });
       } catch (error) {
-        return { available: false, error: error.message, raw: result.stdout.trim() };
+        attempts.push({
+          command,
+          error: `invalid_json: ${error.message}`,
+          stdout: String(result.stdout || '').slice(0, 500),
+          stderr: String(result.stderr || '').slice(0, 1000)
+        });
       }
+    } else {
+      attempts.push({
+        command,
+        status: result.status,
+        signal: result.signal || '',
+        error: result.error?.message || '',
+        stderr: String(result.stderr || '').slice(-2000),
+        stdout: String(result.stdout || '').slice(-500)
+      });
     }
   }
 
-  return { available: false, error: 'python_or_opencv_unavailable' };
+  return {
+    available: false,
+    error: attempts.length ? 'python_vision_failed' : 'python_or_opencv_unavailable',
+    attempts
+  };
 }
 
 function buildPayload(job, sourcePath, outputDir) {
