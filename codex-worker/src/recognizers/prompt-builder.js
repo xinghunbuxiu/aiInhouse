@@ -3,6 +3,7 @@ function stringify(value) {
 }
 
 const { buildRecognitionPromptAssetContext } = require('../assets/recognition-matcher');
+const { buildFloorplanGrammarGuide } = require('./floorplan-grammar');
 
 function summarizeRooms(rooms = []) {
   return rooms.slice(0, 6).map((room) => ({
@@ -31,6 +32,7 @@ function buildRecognitionPrompt(payload = {}) {
     floorPlan: payload.floorPlan || {},
     sourceAsset: payload.sourceAsset || {},
     recognitionAssetGuide: buildRecognitionPromptAssetContext(),
+    floorplanGrammarGuide: buildFloorplanGrammarGuide(),
     preprocessing: preprocessing
       ? {
           status: preprocessing.status,
@@ -73,7 +75,9 @@ function buildRecognitionPrompt(payload = {}) {
 - 电梯井内的对角交叉线、井道边框和电梯门应作为结构/设备证据，不应解释成房间家具或卫生间洁具；入户门必须连接入户区域，不能凭空移动到电梯井。
 - 不要为了满足常见户型模板而补齐房间数量；未标注且证据不足的区域使用“未确认空间”，在 issues 中说明。
 - 如果无法完全确认，可以参考 fallbackDraft，但不要机械照抄；候选线段冲突时优先保持墙体闭合和房间拓扑合理。
+- 按 floorplanGrammarGuide 的组合语法推理：图元形状只是候选，必须结合墙线、空间边界、邻接、洞口、OCR 和周边图例关系判断；不能把单个符号直接升级成确定语义。
 - 先建立“墙线—房间边界—门窗洞口—OCR 标签”的对应关系，再输出最终对象；不要把彼此独立的识别任务当成互不相关的列表。
+- 对门窗、房间类型、管井/交通核、阳台等高影响推断，在 issues 或对象可用的 evidence 字段中记录可观察线索、相关对象 ID、空间关系和冲突；不确定时保留候选并说明证据缺口，不得虚构补全。
 - 房间边界应尽量由可见墙线支撑；相邻房间可以共享边界，但不同房间的内部区域不应大面积重叠。若原图存在套叠/不规则轮廓，不要强行用矩形填平，应在 issues 中说明。
 - 门窗洞口应落在对应墙线附近，门洞通常连接两个空间或一个空间与外部；不能仅因门中心落在房间矩形内就认定连接正确。无法确认连接关系时保留疑点，不要虚构连接。
 - 输出前做一次自检：房间宽高必须为正数；墙段起终点不能缺失或重合；门窗位置必须有依据；OCR 名称与空间几何位置必须一致；检查重复房间、房间重叠和孤立门窗。
