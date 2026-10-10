@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js",
+    "test": "node src/recognizers/spatial-reasoning.test.js && node src/recognizers/floorplan-grammar.test.js && node src/assets/recognition-matcher.test.js"
   },
   "engines": {
     "node": ">=18"

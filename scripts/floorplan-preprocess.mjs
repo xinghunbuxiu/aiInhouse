@@ -28,61 +28,146 @@ function getFileSize(filePath) {
 }
 
 function getImageMeta(filePath) {
+  // Use the native macOS reader when available, then fall back to parsing
+  // common image headers so Linux/Windows still report dimensions without Pillow.
   const output = run('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', filePath]);
-  if (output.status !== 0) {
-    return { width: 0, height: 0 };
+  if (output.status === 0) {
+    const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
+    const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
+    if (widthMatch && heightMatch) {
+      return { width: Number(widthMatch[1]), height: Number(heightMatch[1]) };
+    }
   }
 
-  const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
-  const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
-  return {
-    width: widthMatch ? Number(widthMatch[1]) : 0,
-    height: heightMatch ? Number(heightMatch[1]) : 0
-  };
+  try {
+    const buffer = fs.readFileSync(filePath);
+    // PNG: width and height are unsigned big-endian integers in IHDR.
+    if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+    // GIF: logical screen width/height are little-endian 16-bit values.
+    if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'GIF') {
+      return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+    }
+    // JPEG: walk marker segments until a Start Of Frame marker is found.
+    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let offset = 2;
+      while (offset + 4 <= buffer.length) {
+        if (buffer[offset] !== 0xff) {
+          offset += 1;
+          continue;
+        }
+        while (offset < buffer.length && buffer[offset] === 0xff) offset += 1;
+        if (offset >= buffer.length) break;
+        const marker = buffer[offset++];
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) continue;
+        if (offset + 2 > buffer.length) break;
+        const segmentLength = buffer.readUInt16BE(offset);
+        if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
+        const startOfFrame = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker);
+        if (startOfFrame && segmentLength >= 7) {
+          return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+        }
+        offset += segmentLength;
+      }
+    }
+    // WebP extended format (VP8X) stores 24-bit width/height minus one.
+    if (buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP' && buffer.toString('ascii', 12, 16) === 'VP8X') {
+      return { width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };
+    }
+  } catch {
+    // Unreadable/unsupported images remain explicitly dimensionless.
+  }
+  return { width: 0, height: 0 };
 }
-
 function buildCompressedImage(sourcePath, outputDir) {
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
+  if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
     return {
       preprocessedImagePath: '',
-      operations: ['missing-source']
+      operations: ['missing-source'],
+      beforeSizeBytes: 0,
+      afterSizeBytes: 0,
+      beforeWidth: 0,
+      beforeHeight: 0,
+      afterWidth: 0,
+      afterHeight: 0
     };
   }
 
   const targetFile = path.join(outputDir, 'recognition-input.jpg');
   const beforeSize = getFileSize(sourcePath);
   const metaBefore = getImageMeta(sourcePath);
-  const result = run('sips', [
-    '-s', 'format', 'jpeg',
-    '-s', 'formatOptions', '75',
-    '-Z', '1400',
-    sourcePath,
-    '--out', targetFile
-  ]);
 
-  if (result.status !== 0) {
-    return {
-      preprocessedImagePath: sourcePath,
-      operations: ['sips-failed-use-source'],
-      beforeSizeBytes: beforeSize,
-      afterSizeBytes: beforeSize,
-      beforeWidth: metaBefore.width,
-      beforeHeight: metaBefore.height,
-      afterWidth: metaBefore.width,
-      afterHeight: metaBefore.height
-    };
+  // Prefer Pillow for a portable implementation on Linux/macOS/Windows.
+  // EXIF orientation is applied before resizing so OCR and geometry use the
+  // same visual coordinate system. If Pillow is unavailable, retain the
+  // existing macOS sips path, then safely fall back to the original file.
+  const pythonScript = [
+    'import sys',
+    'try:',
+    ' from PIL import Image, ImageOps',
+    ' image = Image.open(sys.argv[1])',
+    ' image = ImageOps.exif_transpose(image).convert("RGB")',
+    ' image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)',
+    ' image.save(sys.argv[2], "JPEG", quality=75, optimize=True)',
+    ' print(f"{image.width}x{image.height}")',
+    'except Exception as exc:',
+    ' print(str(exc), file=sys.stderr)',
+    ' sys.exit(1)'
+  ].join('\n');
+  const pythonNames = process.platform === 'win32' ? ['python', 'py'] : ['python3', 'python'];
+  for (const python of pythonNames) {
+    const result = run(python, ['-c', pythonScript, sourcePath, targetFile]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const dimensions = String(result.stdout || '').match(/(\d+)x(\d+)/);
+      const metaAfter = dimensions
+        ? { width: Number(dimensions[1]), height: Number(dimensions[2]) }
+        : getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['exif-orientation-corrected', 'resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'portable-python-pillow'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
   }
 
-  const metaAfter = getImageMeta(targetFile);
+  if (process.platform === 'darwin') {
+    const result = run('sips', [
+      '-s', 'format', 'jpeg',
+      '-s', 'formatOptions', '75',
+      '-Z', '1400',
+      sourcePath,
+      '--out', targetFile
+    ]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const metaAfter = getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'macos-sips-fallback'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
+  }
+
   return {
-    preprocessedImagePath: targetFile,
-    operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75'],
+    preprocessedImagePath: sourcePath,
+    operations: ['portable-preprocess-unavailable-use-source'],
     beforeSizeBytes: beforeSize,
-    afterSizeBytes: getFileSize(targetFile),
+    afterSizeBytes: beforeSize,
     beforeWidth: metaBefore.width,
     beforeHeight: metaBefore.height,
-    afterWidth: metaAfter.width,
-    afterHeight: metaAfter.height
+    afterWidth: metaBefore.width,
+    afterHeight: metaBefore.height
   };
 }
 
@@ -122,7 +207,12 @@ lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=70, minLineLength=max(3
 line_items = []
 if lines is not None:
     for i, line in enumerate(lines[:160]):
-        x1, y1, x2, y2 = [int(v) for v in line[0]]
+        # OpenCV builds may return Hough lines as either (N, 1, 4) or (N, 4).
+        # Flatten each row instead of assuming the legacy nested shape.
+        coordinates = np.asarray(line).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
         if length < 20:
@@ -752,7 +842,10 @@ def thin_line_candidates():
     if raw_lines is None:
         return candidates
     for raw in raw_lines[:520]:
-        x1, y1, x2, y2 = [int(v) for v in raw[0]]
+        coordinates = np.asarray(raw).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         if length < max(22, min(w, h) // 44) or length > max(w, h) * 0.42:
             continue
@@ -833,7 +926,10 @@ def detect_door_symbol_candidates():
     raw_leaf_lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=28, minLineLength=max(18, min(w, h) // 55), maxLineGap=5)
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:420]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(20, min(w, h) * 0.022) or length > max(92, min(w, h) * 0.11):
                 continue
@@ -899,7 +995,10 @@ def detect_door_symbol_candidates():
 
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:520]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(28, min(w, h) * 0.03) or length > max(108, min(w, h) * 0.13):
                 continue
@@ -1656,18 +1755,39 @@ print(json.dumps({
     'python'
   ].filter(Boolean);
 
-  for (const command of pythonCommands) {
+  const attempts = [];
+  for (const command of [...new Set(pythonCommands)]) {
     const result = run(command, [scriptPath, sourcePath, outputDir], { timeout: 45000 });
     if (result.status === 0 && result.stdout.trim()) {
       try {
-        return JSON.parse(result.stdout.trim());
+        const parsed = JSON.parse(result.stdout.trim());
+        if (parsed.available) return { ...parsed, pythonCommand: command };
+        attempts.push({ command, error: parsed.error || 'vision_unavailable' });
       } catch (error) {
-        return { available: false, error: error.message, raw: result.stdout.trim() };
+        attempts.push({
+          command,
+          error: `invalid_json: ${error.message}`,
+          stdout: String(result.stdout || '').slice(0, 500),
+          stderr: String(result.stderr || '').slice(0, 1000)
+        });
       }
+    } else {
+      attempts.push({
+        command,
+        status: result.status,
+        signal: result.signal || '',
+        error: result.error?.message || '',
+        stderr: String(result.stderr || '').slice(-2000),
+        stdout: String(result.stdout || '').slice(-500)
+      });
     }
   }
 
-  return { available: false, error: 'python_or_opencv_unavailable' };
+  return {
+    available: false,
+    error: attempts.length ? 'python_vision_failed' : 'python_or_opencv_unavailable',
+    attempts
+  };
 }
 
 function buildPayload(job, sourcePath, outputDir) {
@@ -1711,7 +1831,9 @@ function buildPayload(job, sourcePath, outputDir) {
     ],
     debugImages: vision.debugImages || {},
     visionAvailable: Boolean(vision.available),
+    visionPythonCommand: vision.pythonCommand || '',
     visionError: vision.available ? '' : (vision.error || ''),
+    visionAttempts: vision.available ? [] : (vision.attempts || []),
     jobHints: {
       sourceType: job?.job?.source_type || job?.job?.input_payload?.sourceType || 'digital',
       processNotes: job?.job?.input_payload?.processNotes || ''
