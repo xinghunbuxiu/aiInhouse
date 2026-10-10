@@ -23,11 +23,19 @@ jobs:
           python-version: "3.11"
       - name: Install floor-plan image processing dependencies
         run: python -m pip install --disable-pip-version-check numpy pillow opencv-python-headless
+      - name: Verify the exact Python runtime has OpenCV
+        run: python -c "import cv2, numpy, PIL; print('python OpenCV runtime:', cv2.__version__, 'numpy:', numpy.__version__, 'Pillow:', PIL.__version__)"
       - run: npm ci
       - run: npm run verify:2d3d
       # Run the real recognition pipeline on a checked-in image, not just synthetic fixtures.
       - name: Run sample floor-plan recognition
+        env:
+          AIINHOUSE_PYTHON_BIN: python
         run: node scripts/batch-recognition-sample.mjs --image "./WX20260329-112615@2x.png" --output "./tmp/sample-floorplan-eval"
+      - name: Fail if the real sample silently skips visual recognition
+        if: always()
+        run: |
+          node -e "const fs=require('fs'); const p='./tmp/sample-floorplan-eval/summary.json'; if(!fs.existsSync(p)){console.error('Recognition summary missing'); process.exit(1)} const r=JSON.parse(fs.readFileSync(p,'utf8')); const bad=(r.results||[]).filter(x=>!x.visualEvidence?.visionAvailable); if(bad.length){console.error(JSON.stringify(bad.map(x=>({name:x.name,visionError:x.visualEvidence?.visionError,issues:x.visualEvidence?.preprocessingIssues})),null,2));process.exit(1)} console.log('Visual recognition runtime active for',r.results.length,'sample(s)')"
       - name: Upload sample recognition report
         if: always()
         uses: actions/upload-artifact@v4
