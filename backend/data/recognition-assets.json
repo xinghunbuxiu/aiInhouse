@@ -1,7 +1,7 @@
 {
-  "version": "1.3.1",
+  "version": "1.4.0",
   "title": "平面图制图标准识别资产",
-  "description": "面向户型平面图识别的图元本体。依据建筑制图惯例（参考 GB/T 50001、GB/T 50104 及售楼/精装示意图画法）整理墙、柱、门窗、栏杆、交通、管井、洁具、家电、家具与标注等图元，供预处理 scanner、语义门禁与前端图例浏览共用。",
+  "description": "面向户型平面图识别的图元本体。依据建筑制图惯例（参考 GB/T 50001、GB/T 50104 及售楼/精装示意图画法）整理墙、柱、门窗、栏杆、交通、管井、洁具、家电、家具与标注等图元，供预处理 scanner、语义门禁与前端图例浏览共用。 本版本扩展给排水燃气、消防安全及常见精装设备/标注图元；扩展图例用于识别语义，不代表所有项目图纸均采用同一画法。",
   "standardRefs": [
     {
       "id": "GB/T 50001",
@@ -110,6 +110,20 @@
       "layer": "symbols",
       "parseOrder": 52,
       "description": "地暖、散热、新风等机电图例"
+    },
+    {
+      "id": "plumbing",
+      "name": "给排水与燃气",
+      "layer": "symbols",
+      "parseOrder": 42,
+      "description": "水表、立管、地漏及燃气管线等设备与管线符号；需结合湿区/管井位置判断"
+    },
+    {
+      "id": "fire_safety",
+      "name": "消防安全",
+      "layer": "symbols",
+      "parseOrder": 58,
+      "description": "消防设备、报警及排烟符号；平面图中常见但不参与墙体几何生成"
     }
   ],
   "parsePipeline": [
@@ -3944,6 +3958,1318 @@
       },
       "commercialNotes": "新风系统图例。",
       "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"42\" y=\"16\" width=\"36\" height=\"28\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M48 22 H72 M48 28 H72 M48 34 H72\" stroke=\"#64748b\"/><text x=\"60\" y=\"60\" text-anchor=\"middle\" font-size=\"10\" fill=\"#64748b\">新风口</text></svg>"
+    },
+    {
+      "id": "fixture-kitchen-sink",
+      "name": "厨房水槽",
+      "category": "fixture",
+      "aliases": [
+        "洗菜盆",
+        "水槽",
+        "洗涤池"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_fixture",
+      "outputField": "fixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "rectangular-basin",
+          "inner-bowl-or-drain"
+        ],
+        "geometryPriors": [
+          "near-kitchen-counter",
+          "compact-rectangle"
+        ],
+        "rejectIf": [
+          "dimension-text",
+          "isolated-room-label"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">厨房水槽</text></svg>"
+    },
+    {
+      "id": "fixture-floor-drain",
+      "name": "地漏",
+      "category": "plumbing",
+      "aliases": [
+        "地面排水口",
+        "排水地漏"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "floor_drain",
+      "outputField": "plumbingFixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-square-or-circle",
+          "cross-or-drain-mark"
+        ],
+        "geometryPriors": [
+          "near-wet-area",
+          "small-area"
+        ],
+        "rejectIf": [
+          "dimension-tick",
+          "furniture"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">地漏</text></svg>"
+    },
+    {
+      "id": "fixture-faucet",
+      "name": "水龙头",
+      "category": "fixture",
+      "aliases": [
+        "龙头",
+        "洗手盆龙头"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "faucet",
+      "outputField": "fixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-stem-and-spout",
+          "small-symbol"
+        ],
+        "geometryPriors": [
+          "near-sink-or-basin",
+          "attached-to-fixture"
+        ],
+        "rejectIf": [
+          "wall-line-alone",
+          "dimension-tick"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">水龙头</text></svg>"
+    },
+    {
+      "id": "fixture-mirror",
+      "name": "浴室镜",
+      "category": "fixture",
+      "aliases": [
+        "镜柜",
+        "镜面"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "bathroom_mirror",
+      "outputField": "fixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-rectangle",
+          "above-basin"
+        ],
+        "geometryPriors": [
+          "bathroom-context",
+          "near-basin"
+        ],
+        "rejectIf": [
+          "wall-outline-alone"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">浴室镜</text></svg>"
+    },
+    {
+      "id": "fixture-kitchen-cabinet",
+      "name": "橱柜",
+      "category": "fixture",
+      "aliases": [
+        "地柜",
+        "吊柜",
+        "厨房柜体"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "kitchen_cabinet",
+      "outputField": "fixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "long-rectangular-cabinet",
+          "segmented-front"
+        ],
+        "geometryPriors": [
+          "kitchen-context",
+          "counter-run"
+        ],
+        "rejectIf": [
+          "structural-wall-band"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">橱柜</text></svg>"
+    },
+    {
+      "id": "appliance-oven",
+      "name": "烤箱",
+      "category": "appliance",
+      "aliases": [
+        "嵌入式烤箱",
+        "蒸烤箱"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "oven",
+      "outputField": "appliances",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle-with-inner-frame"
+        ],
+        "geometryPriors": [
+          "inside-kitchen-cabinet",
+          "compact-appliance"
+        ],
+        "rejectIf": [
+          "wall-band"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">烤箱</text></svg>"
+    },
+    {
+      "id": "appliance-microwave",
+      "name": "微波炉",
+      "category": "appliance",
+      "aliases": [
+        "微波箱"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "microwave",
+      "outputField": "appliances",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle",
+          "inner-door-outline"
+        ],
+        "geometryPriors": [
+          "kitchen-counter-or-cabinet"
+        ],
+        "rejectIf": [
+          "wall-band"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">微波炉</text></svg>"
+    },
+    {
+      "id": "appliance-cooktop",
+      "name": "独立灶具",
+      "category": "appliance",
+      "aliases": [
+        "燃气灶具",
+        "电磁炉"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "cooktop",
+      "outputField": "appliances",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "rectangle-with-burner-circles"
+        ],
+        "geometryPriors": [
+          "kitchen-counter",
+          "multiple-circular-burners"
+        ],
+        "rejectIf": [
+          "dimension-chain"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">独立灶具</text></svg>"
+    },
+    {
+      "id": "appliance-air-conditioner-outdoor",
+      "name": "空调外机",
+      "category": "appliance",
+      "aliases": [
+        "室外机",
+        "空调机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "ac_outdoor_unit",
+      "outputField": "appliances",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle-with-fan-circle"
+        ],
+        "geometryPriors": [
+          "near-exterior-wall-or-ac-platform"
+        ],
+        "rejectIf": [
+          "column-block"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">空调外机</text></svg>"
+    },
+    {
+      "id": "plumbing-water-meter",
+      "name": "水表",
+      "category": "plumbing",
+      "aliases": [
+        "冷水表",
+        "热水表"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "water_meter",
+      "outputField": "plumbingFixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-circle-or-box",
+          "letter-or-meter-mark"
+        ],
+        "geometryPriors": [
+          "near-pipe-entry",
+          "utility-zone"
+        ],
+        "rejectIf": [
+          "room-label"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">水表</text></svg>"
+    },
+    {
+      "id": "plumbing-gas-meter",
+      "name": "燃气表",
+      "category": "plumbing",
+      "aliases": [
+        "煤气表",
+        "天然气表"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "gas_meter",
+      "outputField": "plumbingFixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-box-with-meter-mark"
+        ],
+        "geometryPriors": [
+          "near-kitchen-or-balcony-service-zone"
+        ],
+        "rejectIf": [
+          "wall-band"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">燃气表</text></svg>"
+    },
+    {
+      "id": "plumbing-riser",
+      "name": "给排水立管",
+      "category": "plumbing",
+      "aliases": [
+        "排水立管",
+        "管道立管"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "plumbing_riser",
+      "outputField": "plumbingFixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-circle-or-double-circle",
+          "pipe-center-mark"
+        ],
+        "geometryPriors": [
+          "near-shaft-or-wet-room"
+        ],
+        "rejectIf": [
+          "furniture-circle"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">给排水立管</text></svg>"
+    },
+    {
+      "id": "plumbing-gas-pipe",
+      "name": "燃气管线",
+      "category": "plumbing",
+      "aliases": [
+        "燃气管",
+        "天然气管道"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "gas_pipe",
+      "outputField": "plumbingLines",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-continuous-line",
+          "pipe-route"
+        ],
+        "geometryPriors": [
+          "kitchen-context",
+          "connects-gas-point"
+        ],
+        "rejectIf": [
+          "dimension-line-alone"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">燃气管线</text></svg>"
+    },
+    {
+      "id": "electrical-distribution-box",
+      "name": "配电箱",
+      "category": "electrical",
+      "aliases": [
+        "强电箱",
+        "户内配电箱"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "distribution_box",
+      "outputField": "electricalPoints",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "rectangle-with-db-label-or-cross"
+        ],
+        "geometryPriors": [
+          "near-entry-wall",
+          "electrical-context"
+        ],
+        "rejectIf": [
+          "large-structural-block"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">配电箱</text></svg>"
+    },
+    {
+      "id": "electrical-weak-box",
+      "name": "弱电箱",
+      "category": "electrical",
+      "aliases": [
+        "信息箱",
+        "多媒体箱"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "weak_current_box",
+      "outputField": "electricalPoints",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle-with-network-label"
+        ],
+        "geometryPriors": [
+          "near-entry",
+          "low-voltage-context"
+        ],
+        "rejectIf": [
+          "wall-band"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">弱电箱</text></svg>"
+    },
+    {
+      "id": "electrical-smoke-detector",
+      "name": "烟感探测器",
+      "category": "electrical",
+      "aliases": [
+        "感烟探测器",
+        "烟雾报警器"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "smoke_detector",
+      "outputField": "electricalPoints",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-circle-with-center-dot"
+        ],
+        "geometryPriors": [
+          "ceiling-point-symbol"
+        ],
+        "rejectIf": [
+          "furniture-circle"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">烟感探测器</text></svg>"
+    },
+    {
+      "id": "electrical-intercom",
+      "name": "可视对讲",
+      "category": "electrical",
+      "aliases": [
+        "门禁对讲",
+        "室内对讲机"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "intercom",
+      "outputField": "electricalPoints",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle-near-entry"
+        ],
+        "geometryPriors": [
+          "entry-area",
+          "wall-mounted-symbol"
+        ],
+        "rejectIf": [
+          "window-frame"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">可视对讲</text></svg>"
+    },
+    {
+      "id": "annotation-room-number",
+      "name": "房间编号",
+      "category": "annotation",
+      "aliases": [
+        "房号",
+        "房间序号"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "room_number",
+      "outputField": "annotations",
+      "scannerIds": [],
+      "priority": 55,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-text-or-number",
+          "inside-room-boundary"
+        ],
+        "geometryPriors": [
+          "centered-in-room",
+          "paired-with-room-name"
+        ],
+        "rejectIf": [
+          "dimension-number-on-dimension-chain"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 28 H102\" stroke=\"#64748b\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\"/><circle cx=\"60\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"32\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0f172a\">标</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">房间编号</text></svg>"
+    },
+    {
+      "id": "annotation-door-window-tag",
+      "name": "门窗编号",
+      "category": "annotation",
+      "aliases": [
+        "门窗表编号",
+        "窗编号",
+        "门编号"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "opening_tag",
+      "outputField": "annotations",
+      "scannerIds": [],
+      "priority": 55,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-alphanumeric-tag",
+          "near-opening"
+        ],
+        "geometryPriors": [
+          "adjacent-to-door-or-window"
+        ],
+        "rejectIf": [
+          "door-leaf-or-wall-gap"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 28 H102\" stroke=\"#64748b\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\"/><circle cx=\"60\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"32\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0f172a\">标</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">门窗编号</text></svg>"
+    },
+    {
+      "id": "annotation-section-reference",
+      "name": "详图索引符号",
+      "category": "annotation",
+      "aliases": [
+        "索引符号",
+        "详图号"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "detail_reference",
+      "outputField": "annotations",
+      "scannerIds": [],
+      "priority": 55,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "circle-with-leader",
+          "reference-number"
+        ],
+        "geometryPriors": [
+          "near-detail-target"
+        ],
+        "rejectIf": [
+          "fixture-circle"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 28 H102\" stroke=\"#64748b\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\"/><circle cx=\"60\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"32\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0f172a\">标</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">详图索引符号</text></svg>"
+    },
+    {
+      "id": "outdoor-garden",
+      "name": "绿化/花池",
+      "category": "outdoor",
+      "aliases": [
+        "花池",
+        "种植池",
+        "绿植区"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "landscape_bed",
+      "outputField": "outdoorAreas",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "irregular-or-rounded-plant-outline",
+          "plant-hatch"
+        ],
+        "geometryPriors": [
+          "balcony-or-terrace-context"
+        ],
+        "rejectIf": [
+          "structural-wall-fill"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M22 16 H98 V42 H22 Z\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M30 36 Q35 14 44 34 Q52 12 59 34 Q70 10 76 34 Q86 18 92 36\" stroke=\"#15803d\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">绿化/花池</text></svg>"
+    },
+    {
+      "id": "outdoor-ac-platform",
+      "name": "空调设备平台",
+      "category": "outdoor",
+      "aliases": [
+        "空调板",
+        "设备平台"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "ac_platform",
+      "outputField": "outdoorAreas",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-outward-rectangle",
+          "railing-or-screen-edge"
+        ],
+        "geometryPriors": [
+          "adjacent-to-exterior-wall",
+          "near-ac-outdoor-unit"
+        ],
+        "rejectIf": [
+          "interior-room-label"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M22 16 H98 V42 H22 Z\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M30 36 Q35 14 44 34 Q52 12 59 34 Q70 10 76 34 Q86 18 92 36\" stroke=\"#15803d\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">空调设备平台</text></svg>"
+    },
+    {
+      "id": "circulation-ramp",
+      "name": "坡道",
+      "category": "circulation",
+      "aliases": [
+        "无障碍坡道",
+        "坡面"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "ramp",
+      "outputField": "circulation",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "parallel-lines-with-direction-arrow",
+          "slope-mark"
+        ],
+        "geometryPriors": [
+          "connects-levels-or-entry"
+        ],
+        "rejectIf": [
+          "dimension-chain"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"22\" y=\"10\" width=\"76\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M28 16 H92 M28 22 H92 M28 28 H92 M28 34 H92 M28 40 H92\" stroke=\"#475569\" stroke-width=\"1.5\"/><path d=\"M60 40 V15 M54 22 L60 15 L66 22\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">坡道</text></svg>"
+    },
+    {
+      "id": "circulation-stair-arrow",
+      "name": "楼梯上下行箭头",
+      "category": "circulation",
+      "aliases": [
+        "上行箭头",
+        "下行箭头",
+        "梯段方向"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "stair_direction",
+      "outputField": "circulation",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "arrow-on-stair-flight",
+          "UP-or-DN-label"
+        ],
+        "geometryPriors": [
+          "inside-stair-outline"
+        ],
+        "rejectIf": [
+          "north-arrow-outside-plan"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"22\" y=\"10\" width=\"76\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M28 16 H92 M28 22 H92 M28 28 H92 M28 34 H92 M28 40 H92\" stroke=\"#475569\" stroke-width=\"1.5\"/><path d=\"M60 40 V15 M54 22 L60 15 L66 22\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">楼梯上下行箭头</text></svg>"
+    },
+    {
+      "id": "fire-smoke-exhaust",
+      "name": "排烟口/排风口",
+      "category": "fire_safety",
+      "aliases": [
+        "排风口",
+        "排烟阀"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "smoke_exhaust",
+      "outputField": "fireSafety",
+      "scannerIds": [],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-rectangle-with-grille-lines"
+        ],
+        "geometryPriors": [
+          "near-kitchen-or-bathroom",
+          "connected-to-vent-route"
+        ],
+        "rejectIf": [
+          "window-parallel-lines"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"10\" width=\"44\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M48 18 L72 36 M72 18 L48 36\" stroke=\"#b91c1c\" stroke-width=\"2\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">排烟口/排风口</text></svg>"
+    },
+    {
+      "id": "fire-extinguisher",
+      "name": "灭火器",
+      "category": "fire_safety",
+      "aliases": [
+        "灭火器箱",
+        "消防器材"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "fire_extinguisher",
+      "outputField": "fireSafety",
+      "scannerIds": [],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-symbol-or-box-with-FE-label"
+        ],
+        "geometryPriors": [
+          "near-exit-or-corridor"
+        ],
+        "rejectIf": [
+          "furniture-outline-alone"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"10\" width=\"44\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M48 18 L72 36 M72 18 L48 36\" stroke=\"#b91c1c\" stroke-width=\"2\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">灭火器</text></svg>"
+    },
+    {
+      "id": "fire-alarm",
+      "name": "火灾报警按钮",
+      "category": "fire_safety",
+      "aliases": [
+        "手动报警按钮",
+        "消防按钮"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "fire_alarm_call_point",
+      "outputField": "fireSafety",
+      "scannerIds": [],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-circle-or-box-with-alarm-mark"
+        ],
+        "geometryPriors": [
+          "near-exit",
+          "wall-mounted-point"
+        ],
+        "rejectIf": [
+          "dimension-tick"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"10\" width=\"44\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M48 18 L72 36 M72 18 L48 36\" stroke=\"#b91c1c\" stroke-width=\"2\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">火灾报警按钮</text></svg>"
+    },
+    {
+      "id": "fire-hydrant",
+      "name": "消火栓",
+      "category": "fire_safety",
+      "aliases": [
+        "消防栓箱",
+        "室内消火栓"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "fire_hydrant",
+      "outputField": "fireSafety",
+      "scannerIds": [],
+      "priority": 60,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "rectangular-cabinet-with-hydrant-mark"
+        ],
+        "geometryPriors": [
+          "corridor-or-stair-lobby"
+        ],
+        "rejectIf": [
+          "structural-column-block"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"38\" y=\"10\" width=\"44\" height=\"34\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><path d=\"M48 18 L72 36 M72 18 L48 36\" stroke=\"#b91c1c\" stroke-width=\"2\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">消火栓</text></svg>"
+    },
+    {
+      "id": "plumbing-cleanout",
+      "name": "检查口/清扫口",
+      "category": "plumbing",
+      "aliases": [
+        "管道检查口",
+        "清扫口"
+      ],
+      "standardRefs": [
+        "GB/T 50104"
+      ],
+      "modelRole": "cleanout",
+      "outputField": "plumbingFixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "small-circle-or-square-with-cross"
+        ],
+        "geometryPriors": [
+          "near-drain-riser-or-shaft"
+        ],
+        "rejectIf": [
+          "dimension-tick"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"34\" y=\"12\" width=\"52\" height=\"30\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><circle cx=\"60\" cy=\"27\" r=\"8\" stroke=\"#0f172a\" stroke-width=\"2\"/><path d=\"M54 27 H66 M60 21 V33\" stroke=\"#0f172a\" stroke-width=\"1.5\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">检查口/清扫口</text></svg>"
+    },
+    {
+      "id": "annotation-hidden-line",
+      "name": "不可见/隐藏线",
+      "category": "annotation",
+      "aliases": [
+        "虚线",
+        "隐藏轮廓线"
+      ],
+      "standardRefs": [
+        "GB/T 50001"
+      ],
+      "modelRole": "hidden_line",
+      "outputField": "annotations",
+      "scannerIds": [],
+      "priority": 55,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "short-dashed-line",
+          "consistent-dash-spacing"
+        ],
+        "geometryPriors": [
+          "represents-hidden-edge-or-overhead"
+        ],
+        "rejectIf": [
+          "solid-wall-fill"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><path d=\"M18 28 H102\" stroke=\"#64748b\" stroke-width=\"1.5\" stroke-dasharray=\"4 3\"/><circle cx=\"60\" cy=\"28\" r=\"12\" stroke=\"#0f172a\" stroke-width=\"2\"/><text x=\"60\" y=\"32\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0f172a\">标</text><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">不可见/隐藏线</text></svg>"
+    },
+    {
+      "id": "fixture-shower-screen",
+      "name": "淋浴隔断",
+      "category": "fixture",
+      "aliases": [
+        "玻璃淋浴隔断",
+        "淋浴屏"
+      ],
+      "standardRefs": [
+        "industry-sales-plan"
+      ],
+      "modelRole": "shower_screen",
+      "outputField": "fixtures",
+      "scannerIds": [],
+      "priority": 70,
+      "drawingRules": {
+        "lineStyle": "symbol-dependent",
+        "relativeThickness": "scale-dependent",
+        "fill": "none-or-outline",
+        "commonVariants": [
+          "rotated",
+          "mirrored",
+          "simplified-sales-plan",
+          "monochrome-cad"
+        ]
+      },
+      "recognitionHints": {
+        "visualFeatures": [
+          "thin-glass-line-and-door-gap"
+        ],
+        "geometryPriors": [
+          "bathroom-wet-zone",
+          "near-shower"
+        ],
+        "rejectIf": [
+          "structural-wall-thickness"
+        ],
+        "confidenceBoost": 0.03
+      },
+      "commercialNotes": "扩展识别图元；当前为标准化参考图例，需结合原图局部像素、邻接关系与人工复核，不应仅凭此示意 SVG 自动确认。",
+      "glyphSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 120 64\" fill=\"none\"><rect x=\"30\" y=\"12\" width=\"60\" height=\"32\" rx=\"2\" stroke=\"#0f172a\" stroke-width=\"2\" fill=\"none\"/><rect x=\"38\" y=\"18\" width=\"44\" height=\"20\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><circle cx=\"60\" cy=\"28\" r=\"5\" stroke=\"#64748b\" stroke-width=\"1.5\" fill=\"none\"/><text x=\"60\" y=\"58\" text-anchor=\"middle\" font-size=\"9\" fill=\"#64748b\">淋浴隔断</text></svg>"
     }
   ],
   "updatedAt": "2026-08-25T07:15:00.000Z"
