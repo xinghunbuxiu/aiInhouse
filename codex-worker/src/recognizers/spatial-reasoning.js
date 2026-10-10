@@ -29,6 +29,21 @@ function pointInRoom(p, room = {}, tolerance = 0) {
     && Number(p.y) <= Number(room.y) + Number(room.height) + tolerance;
 }
 
+function openingPoint(opening = {}) {
+  if (point(opening.center)) return opening.center;
+  if (point(opening.position)) return opening.position;
+  // Scanner-produced openings often store x/y as the rectangle's top-left,
+  // not as its center. Use the rectangle center for room association.
+  if (point(opening) && finite(opening.width) && finite(opening.height)
+    && Number(opening.width) > 0 && Number(opening.height) > 0) {
+    return {
+      x: Number(opening.x) + Number(opening.width) / 2,
+      y: Number(opening.y) + Number(opening.height) / 2
+    };
+  }
+  return point(opening) ? { x: Number(opening.x), y: Number(opening.y) } : null;
+}
+
 function openingRoomTolerance(opening = {}) {
   // Door/window centers commonly sit on the wall line, just outside the room
   // interior rectangle. Allow a bounded, dimension-aware margin without
@@ -38,7 +53,7 @@ function openingRoomTolerance(opening = {}) {
 }
 
 function roomsNearOpening(opening, rooms = []) {
-  const p = opening.center || opening.position || opening;
+  const p = openingPoint(opening);
   if (!point(p)) return [];
   const tolerance = openingRoomTolerance(opening);
   return rooms.filter(room => pointInRoom(p, room, tolerance));
@@ -95,7 +110,7 @@ function buildSpatialGraph(draft = {}) {
     }
   }
   return { nodes, edges, doorConnections: doors.map((door, index) => {
-    const p = door.center || door.position || door;
+    const p = openingPoint(door);
     const connected = rooms
       .map((room, roomIndex) => ({ room, node: nodes[roomIndex] }))
       .filter(({ room }) => roomsNearOpening(door, [room]).length > 0)
@@ -140,7 +155,7 @@ function validateFloorplanDraft(draft = {}) {
       const id = String(opening.id || `${kind}-${index + 1}`);
       if (openingIds.has(id)) issues.push({ code: `duplicate-${kind}-id`, severity: 'error', entityId: id });
       openingIds.add(id);
-      const p = opening.center || opening.position || opening;
+      const p = openingPoint(opening);
       if (!point(p)) {
         issues.push({ code: `${kind}-position-missing`, severity: 'review', entityId: id });
         return;
@@ -190,7 +205,7 @@ function validateFloorplanDraft(draft = {}) {
   ).length;
   const openings = [...doors, ...windows];
   const associatedOpeningCount = openings.filter(opening => {
-    const p = opening.center || opening.position || opening;
+    const p = openingPoint(opening);
     return point(p) && roomsNearOpening(opening, rooms).length > 0;
   }).length;
   const wallIdsForAttachment = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
