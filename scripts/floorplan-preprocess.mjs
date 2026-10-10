@@ -842,7 +842,10 @@ def thin_line_candidates():
     if raw_lines is None:
         return candidates
     for raw in raw_lines[:520]:
-        x1, y1, x2, y2 = [int(v) for v in raw[0]]
+        coordinates = np.asarray(raw).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         if length < max(22, min(w, h) // 44) or length > max(w, h) * 0.42:
             continue
@@ -923,7 +926,10 @@ def detect_door_symbol_candidates():
     raw_leaf_lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=28, minLineLength=max(18, min(w, h) // 55), maxLineGap=5)
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:420]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(20, min(w, h) * 0.022) or length > max(92, min(w, h) * 0.11):
                 continue
@@ -989,7 +995,10 @@ def detect_door_symbol_candidates():
 
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:520]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(28, min(w, h) * 0.03) or length > max(108, min(w, h) * 0.13):
                 continue
