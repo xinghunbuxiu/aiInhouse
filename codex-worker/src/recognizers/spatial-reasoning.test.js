@@ -24,6 +24,21 @@ assert.equal(rectangleReport.issues.some(issue => issue.code === 'door-not-assoc
 assert.deepEqual(buildSpatialGraph({ rooms: [room], doors: [rectangleDoor] }).doorConnections[0].connectedRoomIds, ['room-a'],
   'spatial graph must use rectangle center instead of top-left coordinates');
 
+const attachedWall = { id: 'wall-a', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } };
+const conflictingWindow = {
+  id: 'window-conflict',
+  center: { x: 50, y: 10 },
+  width: 20,
+  height: 5,
+  attachedWallId: 'wall-a',
+  sourceEvidence: { attachedWallId: 'wall-a', withinWallSpan: false, withinAttachmentSpan: true, wallDistance: 61, wallAxisDelta: -61 }
+};
+const attachmentReport = validateFloorplanDraft({ rooms: [room], walls: [attachedWall], windows: [conflictingWindow] });
+assert.equal(attachmentReport.issues.some(issue => issue.code === 'opening-wall-attachment-evidence-conflict'), true,
+  'an existing wall ID must not override explicit evidence that the opening falls outside the wall span');
+assert.equal(attachmentReport.metrics.wallAttachedOpeningCount, 0,
+  'contradictory attachment evidence must not count as a verified wall attachment');
+
 const overlapReport = validateFloorplanDraft({
   rooms: [
     room,
