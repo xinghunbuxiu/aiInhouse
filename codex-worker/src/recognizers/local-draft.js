@@ -880,7 +880,13 @@ function selectRoomCandidates(candidates = [], maxRooms = 12) {
 
   const selected = [];
   for (const candidate of ordered) {
-    if (selected.some((room) => overlapsRoom(candidate, room) > (isWallMaskInteriorRoom(candidate) || isWallMaskInteriorRoom(room) ? 0.58 : 0.82))) {
+    // Wall-mask interiors should represent disjoint room regions. A large
+    // intersection is more likely a duplicate/partial segmentation than two
+    // real rooms; the previous 0.58 threshold allowed substantial overlaps
+    // through to the final draft (including balcony/bathroom intersections).
+    const wallMaskPair = isWallMaskInteriorRoom(candidate) || selected.some(isWallMaskInteriorRoom);
+    const overlapLimit = wallMaskPair ? 0.3 : 0.55;
+    if (selected.some((room) => overlapsRoom(candidate, room) > overlapLimit)) {
       continue;
     }
     if (selected.some((room) => isRoomCandidateContained(candidate, room) && (room.sourceEvidence?.edgeScore || 0) >= (candidate.sourceEvidence?.edgeScore || 0) + 0.12)) {
