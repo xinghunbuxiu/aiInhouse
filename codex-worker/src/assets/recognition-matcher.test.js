@@ -6,7 +6,7 @@ const {
 
 const catalog = loadRecognitionAssetCatalog();
 assert.strictEqual(catalog.available, true, 'recognition asset catalog must load');
-assert.strictEqual(catalog.symbols.length, 91, 'unexpected recognition symbol count');
+assert(catalog.symbols.length >= 120, `expected expanded symbol catalog, got ${catalog.symbols.length}`);
 
 const context = buildRecognitionPromptAssetContext(catalog);
 const represented = new Set(context.symbolSamples.map((symbol) => symbol.category));
@@ -23,5 +23,29 @@ assert(context.symbolSamples.some((symbol) => symbol.category === 'annotation'),
   'annotation symbols should be represented so they can be distinguished from structure');
 assert(context.symbolSamples.every((symbol) => symbol.id && symbol.name && symbol.category),
   'every prompt symbol should have stable identity and category');
+
+for (const categoryId of ['plumbing', 'fire_safety']) {
+  assert(catalog.categories.some((category) => category.id === categoryId),
+    `catalog is missing expanded category: ${categoryId}`);
+  assert(context.symbolSamples.some((symbol) => symbol.category === categoryId),
+    `prompt context is missing expanded category: ${categoryId}`);
+}
+for (const symbolId of [
+  'fixture-kitchen-sink',
+  'fixture-floor-drain',
+  'plumbing-water-meter',
+  'plumbing-gas-pipe',
+  'electrical-distribution-box',
+  'fire-extinguisher',
+  'fire-hydrant',
+  'annotation-hidden-line'
+]) {
+  const symbol = catalog.symbols.find((item) => item.id === symbolId);
+  assert(symbol, `missing common floorplan symbol: ${symbolId}`);
+  assert(symbol.glyphSvg && symbol.glyphSvg.includes('<svg'),
+    `symbol must include a reference glyph: ${symbolId}`);
+  assert(symbol.recognitionHints?.visualFeatures?.length,
+    `symbol must include visual recognition hints: ${symbolId}`);
+}
 
 console.log(`Recognition asset prompt tests passed: ${context.symbolSamples.length} representative symbols across ${represented.size} categories.`);
