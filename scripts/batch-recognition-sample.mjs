@@ -145,14 +145,27 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
   const draft = buildRecognitionDraft(job, preprocessing);
   const repaired = repairRecognitionTopology(draft);
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
+  const isProposedOpening = (opening) => !(
+    opening.sourceEvidence?.confirmedOpening
+    && !opening.sourceEvidence?.needsVisualConfirmation
+  ) && (
+    opening.sourceEvidence?.needsVisualConfirmation
+    || opening.source === 'semantic-room-opening-prior'
+  );
+  const confirmedDoors = (repaired.doors || []).filter((opening) => !isProposedOpening(opening));
+  const confirmedWindows = (repaired.windows || []).filter((opening) => !isProposedOpening(opening));
+  const confirmedOpenings = [...confirmedDoors, ...confirmedWindows];
+  const proposedOpenings = openings.filter(isProposedOpening);
   const readiness = repaired.quality?.commercialReadiness || {};
   const verifiedAttachedOpenings = countVerifiedAttachedOpenings(openings, repaired.walls || []);
   const attachedOpeningRatio = openings.length ? verifiedAttachedOpenings / openings.length : null;
+  // Validate only confirmed openings. Candidate/prior openings are not proof of
+  // real door/window geometry and must not make spatial validation look complete.
   const spatialValidation = validateFloorplanDraft({
     rooms: repaired.rooms || [],
     walls: repaired.walls || [],
-    doors: repaired.doors || [],
-    windows: repaired.windows || []
+    doors: confirmedDoors,
+    windows: confirmedWindows
   });
   const blockingReasons = readiness.blockingReasons || [];
   const requiresHumanReview = readiness.status === 'needs_human_review'
@@ -171,23 +184,16 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     walls: (repaired.walls || []).length,
     openings: openings.length,
     openingEvidence: {
-      confirmedCount: readiness.metrics?.confirmedOpeningCount ?? null,
-      proposedCount: readiness.metrics?.proposedOpeningCount ?? null,
+      confirmedCount: confirmedOpenings.length,
+      proposedCount: proposedOpenings.length,
       suppressedCount: repaired.topology?.suppressedOpeningCount ?? 0,
       bySource: openings.reduce((counts, opening) => {
         const source = opening.source || 'unknown';
         counts[source] = (counts[source] || 0) + 1;
         return counts;
       }, {}),
-      proposedIds: openings
-        .filter((opening) => !(
-          opening.sourceEvidence?.confirmedOpening
-          && !opening.sourceEvidence?.needsVisualConfirmation
-        ) && (
-          opening.sourceEvidence?.needsVisualConfirmation
-          || opening.source === 'semantic-room-opening-prior'
-        ))
-        .map((opening) => opening.id || null),
+      proposedIds: proposedOpenings.map((opening) => opening.id || null),
+      confirmedIds: confirmedOpenings.map((opening) => opening.id || null),
       suppressed: repaired.topology?.suppressedOpenings || []
     },
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
