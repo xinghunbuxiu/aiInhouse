@@ -258,8 +258,23 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
           : 'passed',
       issueCount: (spatialValidation.issues || []).length,
       issuesByCode: spatialValidation.metrics?.issuesByCode || {},
-      issues: (spatialValidation.issues || []).map(({ code, severity, message, entityId, relatedEntityId }) => ({
-        code, severity, message, entityId, relatedEntityId
+      // Keep the geometric evidence in the published artifact so each review
+      // item can be traced to source entities and measured intersections.
+      issues: (spatialValidation.issues || []).map(({
+        code, severity, message, entityId, relatedEntityId, overlap, entityEvidence, relatedEntityEvidence
+      }) => ({
+        code, severity, message, entityId, relatedEntityId,
+        ...(overlap ? { overlap } : {}),
+        ...(entityEvidence ? { entityEvidence } : {}),
+        ...(relatedEntityEvidence ? { relatedEntityEvidence } : {})
+      })),
+      roomBounds: (repaired.rooms || []).map((room) => ({
+        id: room.id || null,
+        name: room.name || null,
+        x: room.x ?? null,
+        y: room.y ?? null,
+        width: room.width ?? null,
+        height: room.height ?? null
       })),
       metrics: spatialValidation.metrics || {}
     },
