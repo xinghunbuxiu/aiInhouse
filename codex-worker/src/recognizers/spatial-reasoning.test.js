@@ -17,6 +17,13 @@ const farReport = validateFloorplanDraft({ rooms: [room], doors: [farDoor] });
 assert.equal(farReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), true,
   'opening far from all rooms must remain flagged');
 
+const rectangleDoor = { id: 'door-rectangle', x: -10, y: 40, width: 20, height: 10 };
+const rectangleReport = validateFloorplanDraft({ rooms: [room], doors: [rectangleDoor] });
+assert.equal(rectangleReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), false,
+  'scanner rectangle x/y must be interpreted as top-left and associated by its center');
+assert.deepEqual(buildSpatialGraph({ rooms: [room], doors: [rectangleDoor] }).doorConnections[0].connectedRoomIds, ['room-a'],
+  'spatial graph must use rectangle center instead of top-left coordinates');
+
 const overlapReport = validateFloorplanDraft({
   rooms: [
     room,
