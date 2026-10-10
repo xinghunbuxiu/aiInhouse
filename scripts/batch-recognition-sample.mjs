@@ -192,6 +192,9 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     visualEvidence: {
       preprocessingQualityScore: preprocessing.quality?.score ?? null,
       preprocessingIssues: preprocessing.quality?.issues || [],
+      visionAvailable: Boolean(preprocessing.visionAvailable),
+      visionError: preprocessing.visionError || '',
+      visionPythonCommand: preprocessing.geometryCandidates?.pythonCommand || '',
       imageMetrics: preprocessing.image || null,
       lineCount: preprocessing.geometryCandidates?.lines?.length ?? 0,
       contourCount: preprocessing.geometryCandidates?.contours?.length ?? 0,
