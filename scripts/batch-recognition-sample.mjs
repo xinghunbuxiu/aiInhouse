@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { buildRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
+const { validateFloorplanDraft } = require('../codex-worker/src/recognizers/spatial-reasoning.js');
 
 function getArg(flag, fallback = '') {
   const index = process.argv.indexOf(flag);
@@ -147,6 +148,16 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
   const readiness = repaired.quality?.commercialReadiness || {};
   const verifiedAttachedOpenings = countVerifiedAttachedOpenings(openings, repaired.walls || []);
   const attachedOpeningRatio = openings.length ? verifiedAttachedOpenings / openings.length : null;
+  const spatialValidation = validateFloorplanDraft({
+    rooms: repaired.rooms || [],
+    walls: repaired.walls || [],
+    doors: repaired.doors || [],
+    windows: repaired.windows || []
+  });
+  const blockingReasons = readiness.blockingReasons || [];
+  const requiresHumanReview = readiness.status === 'needs_human_review'
+    || blockingReasons.some((reason) => /review|复核|人工/i.test(String(reason)))
+    || Boolean(repaired.quality?.needsReview);
 
   return {
     image: filePath,
@@ -162,7 +173,15 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
     readinessStatus: readiness.status || 'unknown',
     readinessScore: readiness.score ?? null,
-    blockingReasons: readiness.blockingReasons || [],
+    requiresHumanReview,
+    blockingReasons,
+    spatialValidation: {
+      valid: spatialValidation.valid,
+      issueCount: (spatialValidation.issues || []).length,
+      issuesByCode: spatialValidation.metrics?.issuesByCode || {},
+      issues: (spatialValidation.issues || []).map(({ code, message, entityId, relatedEntityId }) => ({ code, message, entityId, relatedEntityId })),
+      metrics: spatialValidation.metrics || {}
+    },
     outputDir
   };
 }
@@ -170,7 +189,7 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
 function summarize(results) {
   const valid = results.filter((row) => !row.error);
   const ready = valid.filter((row) => row.readinessStatus === 'commercial_ready');
-  const review = valid.filter((row) => row.readinessStatus === 'needs_human_review');
+  const review = valid.filter((row) => row.requiresHumanReview);
   const blocked = valid.filter((row) => row.readinessStatus === 'blocked');
   return {
     total: results.length,
