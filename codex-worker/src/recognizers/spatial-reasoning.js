@@ -224,6 +224,24 @@ function validateFloorplanDraft(draft = {}) {
       }
       return;
     }
+    const attachmentEvidence = opening.sourceEvidence || {};
+    const contradictsAttachment = attachmentEvidence.withinWallSpan === false
+      || attachmentEvidence.withinAttachmentSpan === false;
+    if (contradictsAttachment) {
+      issues.push({
+        code: 'opening-wall-attachment-evidence-conflict',
+        severity: 'review',
+        entityId: id,
+        relatedEntityId: String(attachedWallId),
+        evidence: {
+          withinWallSpan: attachmentEvidence.withinWallSpan ?? null,
+          withinAttachmentSpan: attachmentEvidence.withinAttachmentSpan ?? null,
+          wallDistance: attachmentEvidence.wallDistance ?? null,
+          wallAxisDelta: attachmentEvidence.wallAxisDelta ?? null
+        }
+      });
+      return;
+    }
     if (!opening.needsWallAttachmentReview) {
       wallAttachedOpeningCount += 1;
     } else {
