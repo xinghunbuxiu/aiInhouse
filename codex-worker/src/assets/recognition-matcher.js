@@ -463,20 +463,71 @@ function median(values = []) {
 }
 
 function buildRecognitionPromptAssetContext(catalog = loadRecognitionAssetCatalog()) {
-  const symbols = (catalog.symbols || []).slice(0, 18).map((symbol) => ({
+  const allSymbols = catalog.symbols || [];
+  const categories = catalog.categories || [];
+  const parseOrder = catalog.parsePipeline || [];
+  const categoryOrder = new Map(parseOrder.map((id, index) => [id, index]));
+  const categoryMeta = new Map(categories.map((category) => [category.id, category]));
+
+  // Do not take the first N catalog entries: that silently starves later
+  // categories (doors/windows, furniture, MEP and electrical symbols) from
+  // the model context. Select representative symbols per category instead.
+  const limits = {
+    wall: 3,
+    column: 2,
+    opening: 5,
+    railing: 1,
+    outdoor: 2,
+    circulation: 2,
+    shaft: 2,
+    fixture: 2,
+    appliance: 1,
+    mep: 2,
+    electrical: 2,
+    furniture: 2,
+    annotation: 2
+  };
+  const selected = [];
+  for (const category of [...categories].sort((a, b) =>
+    (categoryOrder.get(a.id) ?? 999) - (categoryOrder.get(b.id) ?? 999)
+  )) {
+    const limit = limits[category.id] || 1;
+    const candidates = allSymbols
+      .filter((symbol) => symbol.category === category.id)
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    selected.push(...candidates.slice(0, limit));
+  }
+
+  const symbols = selected.map((symbol) => ({
     id: symbol.id,
     name: symbol.name,
+    aliases: (symbol.aliases || []).slice(0, 4),
     category: symbol.category,
+    categoryName: categoryMeta.get(symbol.category)?.name || symbol.category,
     modelRole: symbol.modelRole,
-    drawing: symbol.drawingRules?.lineStyle,
-    rejectIf: (symbol.recognitionHints?.rejectIf || []).slice(0, 3)
+    outputField: symbol.outputField,
+    scannerIds: (symbol.scannerIds || []).slice(0, 3),
+    drawing: {
+      lineStyle: symbol.drawingRules?.lineStyle || null,
+      relativeThickness: symbol.drawingRules?.relativeThickness || null,
+      commonVariants: (symbol.drawingRules?.commonVariants || []).slice(0, 4)
+    },
+    visualFeatures: (symbol.recognitionHints?.visualFeatures || []).slice(0, 5),
+    geometryPrior: symbol.recognitionHints?.geometryPrior || null,
+    rejectIf: (symbol.recognitionHints?.rejectIf || []).slice(0, 4)
   }));
 
   return {
     version: catalog.version,
-    parsePipeline: catalog.parsePipeline || [],
+    parsePipeline: parseOrder,
+    categories: categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      layer: category.layer,
+      symbolCount: allSymbols.filter((symbol) => symbol.category === category.id).length
+    })),
     symbolSamples: symbols,
-    note: '尺寸线/标注不得当墙；门需门扇+弧；窗需平行细线或凸窗盒；承重墙通常更粗更黑。'
+    note: '图例资产用于形成候选解释，不等于已确认检测结果。尺寸线/标注不得当墙；门要结合门扇、开启弧、墙体缺口与邻接空间；窗要结合平行细线/窗框和外墙位置；家具、洁具、电气与暖通符号用于空间语义，不得直接作为墙体。'
   };
 }
 
