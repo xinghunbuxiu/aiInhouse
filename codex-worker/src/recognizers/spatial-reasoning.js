@@ -29,6 +29,21 @@ function pointInRoom(p, room = {}, tolerance = 0) {
     && Number(p.y) <= Number(room.y) + Number(room.height) + tolerance;
 }
 
+function openingRoomTolerance(opening = {}) {
+  // Door/window centers commonly sit on the wall line, just outside the room
+  // interior rectangle. Allow a bounded, dimension-aware margin without
+  // associating openings that are far away from every room.
+  const span = Math.max(Number(opening.width) || 0, Number(opening.height) || 0);
+  return Math.max(8, Math.min(24, span * 0.35));
+}
+
+function roomsNearOpening(opening, rooms = []) {
+  const p = opening.center || opening.position || opening;
+  if (!point(p)) return [];
+  const tolerance = openingRoomTolerance(opening);
+  return rooms.filter(room => pointInRoom(p, room, tolerance));
+}
+
 function segmentLength(segment = {}) {
   if (!point(segment.start) || !point(segment.end)) return 0;
   return Math.hypot(
@@ -134,7 +149,7 @@ function validateFloorplanDraft(draft = {}) {
         || (opening.height !== undefined && (!finite(opening.height) || Number(opening.height) <= 0))) {
         issues.push({ code: `invalid-${kind}-dimensions`, severity: 'review', entityId: id });
       }
-      const roomsContainingOpening = rooms.filter(room => pointInRoom(p, room, 3));
+      const roomsContainingOpening = roomsNearOpening(opening, rooms);
       if (roomsContainingOpening.length === 0) {
         issues.push({ code: `${kind}-not-associated-with-room`, severity: 'review', entityId: id });
       }
@@ -166,7 +181,7 @@ function validateFloorplanDraft(draft = {}) {
   const openings = [...doors, ...windows];
   const associatedOpeningCount = openings.filter(opening => {
     const p = opening.center || opening.position || opening;
-    return point(p) && rooms.some(room => pointInRoom(p, room, 3));
+    return point(p) && roomsNearOpening(opening, rooms).length > 0;
   }).length;
   const wallIdsForAttachment = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
   let wallAttachedOpeningCount = 0;
