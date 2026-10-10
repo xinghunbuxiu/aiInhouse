@@ -19,6 +19,8 @@ for (const category of catalog.categories) {
 assert(context.symbolSamples.length > 18, 'prompt context should not truncate the catalog to the first 18 symbols');
 assert(context.symbolSamples.some((symbol) => symbol.category === 'opening' && symbol.visualFeatures.length > 0),
   'door/window symbols should include visual evidence');
+assert(context.symbolSamples.some((symbol) => symbol.geometryPriors.length > 0),
+  'prompt samples should include geometry priors from the catalog');
 assert(context.symbolSamples.some((symbol) => symbol.category === 'annotation'),
   'annotation symbols should be represented so they can be distinguished from structure');
 assert(context.symbolSamples.every((symbol) => symbol.id && symbol.name && symbol.category),
@@ -48,4 +50,7 @@ for (const symbolId of [
     `symbol must include visual recognition hints: ${symbolId}`);
 }
 
-console.log(`Recognition asset prompt tests passed: ${context.symbolSamples.length} representative symbols across ${represented.size} categories.`);
+assert(catalog.symbols.every((symbol) => symbol.id && symbol.name && symbol.category && symbol.glyphSvg),
+  'every catalog symbol should include stable identity and a reference glyph');
+
+console.log(`Recognition asset prompt tests passed: ${catalog.symbols.length} catalog symbols; ${context.symbolSamples.length} prompt samples across ${represented.size} categories.`);
