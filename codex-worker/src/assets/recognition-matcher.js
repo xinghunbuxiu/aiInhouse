@@ -481,9 +481,11 @@ function buildRecognitionPromptAssetContext(catalog = loadRecognitionAssetCatalo
     circulation: 2,
     shaft: 2,
     fixture: 2,
+    plumbing: 3,
     appliance: 1,
     mep: 2,
     electrical: 2,
+    fire_safety: 2,
     furniture: 2,
     annotation: 2
   };
@@ -513,7 +515,7 @@ function buildRecognitionPromptAssetContext(catalog = loadRecognitionAssetCatalo
       commonVariants: (symbol.drawingRules?.commonVariants || []).slice(0, 4)
     },
     visualFeatures: (symbol.recognitionHints?.visualFeatures || []).slice(0, 5),
-    geometryPrior: symbol.recognitionHints?.geometryPrior || null,
+    geometryPriors: (symbol.recognitionHints?.geometryPriors || symbol.recognitionHints?.geometryPrior || []).slice(0, 5),
     rejectIf: (symbol.recognitionHints?.rejectIf || []).slice(0, 4)
   }));
 
