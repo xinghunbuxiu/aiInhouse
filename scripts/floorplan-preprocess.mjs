@@ -207,7 +207,12 @@ lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=70, minLineLength=max(3
 line_items = []
 if lines is not None:
     for i, line in enumerate(lines[:160]):
-        x1, y1, x2, y2 = [int(v) for v in line[0]]
+        # OpenCV builds may return Hough lines as either (N, 1, 4) or (N, 4).
+        # Flatten each row instead of assuming the legacy nested shape.
+        coordinates = np.asarray(line).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
         if length < 20:
