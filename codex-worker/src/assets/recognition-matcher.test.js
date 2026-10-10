@@ -53,4 +53,35 @@ for (const symbolId of [
 assert(catalog.symbols.every((symbol) => symbol.id && symbol.name && symbol.category && symbol.glyphSvg),
   'every catalog symbol should include stable identity and a reference glyph');
 
+// Treat the catalog as a maintained ontology, not just a loose list of examples.
+const categoryIds = catalog.categories.map((category) => category.id);
+assert.strictEqual(new Set(categoryIds).size, categoryIds.length,
+  'category IDs must be unique');
+const symbolIds = catalog.symbols.map((symbol) => symbol.id);
+assert.strictEqual(new Set(symbolIds).size, symbolIds.length,
+  'symbol IDs must be unique');
+
+for (const category of catalog.categories) {
+  assert(catalog.parsePipeline.includes(category.id),
+    `category must be present in parsePipeline: ${category.id}`);
+  assert(catalog.symbols.some((symbol) => symbol.category === category.id),
+    `category must have at least one symbol: ${category.id}`);
+}
+for (const symbol of catalog.symbols) {
+  assert(categoryIds.includes(symbol.category),
+    `symbol points to an unknown category: ${symbol.id} -> ${symbol.category}`);
+  assert(Array.isArray(symbol.aliases),
+    `symbol aliases must be an array: ${symbol.id}`);
+  assert(Array.isArray(symbol.recognitionHints?.visualFeatures)
+      && symbol.recognitionHints.visualFeatures.length > 0,
+    `symbol needs visual recognition features: ${symbol.id}`);
+  assert(Array.isArray(symbol.recognitionHints?.geometryPriors)
+      && symbol.recognitionHints.geometryPriors.length > 0,
+    `symbol needs geometric/context priors: ${symbol.id}`);
+  assert(symbol.glyphSvg.startsWith('<svg') && symbol.glyphSvg.includes('</svg>'),
+    `symbol SVG reference must be a complete SVG element: ${symbol.id}`);
+}
+assert(catalog.parsePipeline.every((categoryId) => categoryIds.includes(categoryId)),
+  'parsePipeline must not contain unknown categories');
+
 console.log(`Recognition asset prompt tests passed: ${catalog.symbols.length} catalog symbols; ${context.symbolSamples.length} prompt samples across ${represented.size} categories.`);
