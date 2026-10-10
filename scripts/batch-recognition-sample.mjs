@@ -132,7 +132,12 @@ export function countVerifiedAttachedOpenings(openings = [], walls = []) {
   const wallIds = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
   return openings.filter((item) => {
     const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
-    return Boolean(wallId && wallIds.has(String(wallId)) && !item.needsWallAttachmentReview);
+    const evidence = item.sourceEvidence || {};
+    const contradictoryEvidence = evidence.withinWallSpan === false
+      || evidence.withinAttachmentSpan === false;
+    return Boolean(wallId && wallIds.has(String(wallId))
+      && !item.needsWallAttachmentReview
+      && !contradictoryEvidence);
   }).length;
 }
 
