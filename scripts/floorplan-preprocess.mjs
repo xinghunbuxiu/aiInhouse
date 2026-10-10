@@ -1817,7 +1817,9 @@ function buildPayload(job, sourcePath, outputDir) {
     ],
     debugImages: vision.debugImages || {},
     visionAvailable: Boolean(vision.available),
+    visionPythonCommand: vision.pythonCommand || '',
     visionError: vision.available ? '' : (vision.error || ''),
+    visionAttempts: vision.available ? [] : (vision.attempts || []),
     jobHints: {
       sourceType: job?.job?.source_type || job?.job?.input_payload?.sourceType || 'digital',
       processNotes: job?.job?.input_payload?.processNotes || ''
