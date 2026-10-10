@@ -98,7 +98,7 @@ function buildSpatialGraph(draft = {}) {
     const p = door.center || door.position || door;
     const connected = rooms
       .map((room, roomIndex) => ({ room, node: nodes[roomIndex] }))
-      .filter(({ room }) => pointInRoom(p, room, 3))
+      .filter(({ room }) => roomsNearOpening(door, [room]).length > 0)
       .map(({ node }) => node.id);
     return { id: String(door.id || `door-${index + 1}`), connectedRoomIds: connected };
   }) };
@@ -164,7 +164,17 @@ function validateFloorplanDraft(draft = {}) {
       const overlapX = Math.min(Number(a.x)+Number(a.width), Number(b.x)+Number(b.width)) - Math.max(Number(a.x),Number(b.x));
       const overlapY = Math.min(Number(a.y)+Number(a.height), Number(b.y)+Number(b.height)) - Math.max(Number(a.y),Number(b.y));
       if (overlapX > 2 && overlapY > 2) {
-        issues.push({ code: 'room-bounds-overlap', severity: 'review', entityId: String(a.id || `room-${i+1}`), relatedEntityId: String(b.id || `room-${j+1}`) });
+        issues.push({
+          code: 'room-bounds-overlap',
+          severity: 'review',
+          entityId: String(a.id || `room-${i+1}`),
+          relatedEntityId: String(b.id || `room-${j+1}`),
+          overlap: {
+            width: Number(overlapX.toFixed(2)),
+            height: Number(overlapY.toFixed(2)),
+            area: Number((overlapX * overlapY).toFixed(2))
+          }
+        });
       }
     }
   }
