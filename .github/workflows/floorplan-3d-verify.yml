@@ -17,4 +17,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify:2d3d
+      # Run the real recognition pipeline on a checked-in image, not just synthetic fixtures.
+      - name: Run sample floor-plan recognition
+        run: node scripts/batch-recognition-sample.mjs --image "./WX20260329-112615@2x.png" --output "./tmp/sample-floorplan-eval"
+      - name: Upload sample recognition report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-floorplan-recognition-report
+          path: tmp/sample-floorplan-eval/summary.json
+          if-no-files-found: warn
       - run: npm run build
