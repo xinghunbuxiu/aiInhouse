@@ -15,6 +15,14 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      # The real floor-plan pipeline uses Python/OpenCV for geometry extraction.
+      # Without these dependencies it silently falls back to image compression
+      # and produces zero visual wall/door/window candidates.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install floor-plan image processing dependencies
+        run: python -m pip install --disable-pip-version-check numpy pillow opencv-python-headless
       - run: npm ci
       - run: npm run verify:2d3d
       # Run the real recognition pipeline on a checked-in image, not just synthetic fixtures.
