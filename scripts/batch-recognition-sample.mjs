@@ -157,8 +157,14 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
   const confirmedOpenings = [...confirmedDoors, ...confirmedWindows];
   const proposedOpenings = openings.filter(isProposedOpening);
   const readiness = repaired.quality?.commercialReadiness || {};
-  const verifiedAttachedOpenings = countVerifiedAttachedOpenings(openings, repaired.walls || []);
-  const attachedOpeningRatio = openings.length ? verifiedAttachedOpenings / openings.length : null;
+  const verifiedAttachedOpenings = countVerifiedAttachedOpenings(confirmedOpenings, repaired.walls || []);
+  const verifiedAttachedProposedOpenings = countVerifiedAttachedOpenings(proposedOpenings, repaired.walls || []);
+  const attachedOpeningRatio = confirmedOpenings.length
+    ? verifiedAttachedOpenings / confirmedOpenings.length
+    : null;
+  const proposedAttachedOpeningRatio = proposedOpenings.length
+    ? verifiedAttachedProposedOpenings / proposedOpenings.length
+    : null;
   // Validate only confirmed openings. Candidate/prior openings are not proof of
   // real door/window geometry and must not make spatial validation look complete.
   const spatialValidation = validateFloorplanDraft({
@@ -194,6 +200,9 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
       }, {}),
       proposedIds: proposedOpenings.map((opening) => opening.id || null),
       confirmedIds: confirmedOpenings.map((opening) => opening.id || null),
+      confirmedAttachedCount: verifiedAttachedOpenings,
+      proposedAttachedCount: verifiedAttachedProposedOpenings,
+      proposedAttachedRatio: proposedAttachedOpeningRatio == null ? null : Number(proposedAttachedOpeningRatio.toFixed(2)),
       suppressed: repaired.topology?.suppressedOpenings || []
     },
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
