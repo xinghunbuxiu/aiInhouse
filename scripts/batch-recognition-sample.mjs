@@ -180,8 +180,13 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
         return counts;
       }, {}),
       proposedIds: openings
-        .filter((opening) => opening.sourceEvidence?.needsVisualConfirmation
-          || opening.source === 'semantic-room-opening-prior')
+        .filter((opening) => !(
+          opening.sourceEvidence?.confirmedOpening
+          && !opening.sourceEvidence?.needsVisualConfirmation
+        ) && (
+          opening.sourceEvidence?.needsVisualConfirmation
+          || opening.source === 'semantic-room-opening-prior'
+        ))
         .map((opening) => opening.id || null),
       suppressed: repaired.topology?.suppressedOpenings || []
     },
