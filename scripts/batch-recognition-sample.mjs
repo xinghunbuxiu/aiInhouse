@@ -269,7 +269,11 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
 
 function summarize(results) {
   const valid = results.filter((row) => !row.error);
-  const ready = valid.filter((row) => row.readinessStatus === 'commercial_ready');
+  // Do not advertise a sample as commercially ready when independent spatial validation still requires review.
+  const ready = valid.filter((row) => row.readinessStatus === 'commercial_ready'
+    && !row.requiresHumanReview
+    && !row.spatialValidation?.reviewRequired
+    && row.spatialValidation?.valid);
   const review = valid.filter((row) => row.requiresHumanReview);
   const blocked = valid.filter((row) => row.readinessStatus === 'blocked');
   return {
