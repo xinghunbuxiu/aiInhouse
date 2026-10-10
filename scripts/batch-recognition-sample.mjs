@@ -177,9 +177,17 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     blockingReasons,
     spatialValidation: {
       valid: spatialValidation.valid,
+      reviewRequired: spatialValidation.reviewRequired,
+      status: !spatialValidation.valid
+        ? 'invalid'
+        : spatialValidation.reviewRequired
+          ? 'review_required'
+          : 'passed',
       issueCount: (spatialValidation.issues || []).length,
       issuesByCode: spatialValidation.metrics?.issuesByCode || {},
-      issues: (spatialValidation.issues || []).map(({ code, message, entityId, relatedEntityId }) => ({ code, message, entityId, relatedEntityId })),
+      issues: (spatialValidation.issues || []).map(({ code, severity, message, entityId, relatedEntityId }) => ({
+        code, severity, message, entityId, relatedEntityId
+      })),
       metrics: spatialValidation.metrics || {}
     },
     outputDir
