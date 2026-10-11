@@ -59,6 +59,44 @@ function roomsNearOpening(opening, rooms = []) {
   return rooms.filter(room => pointInRoom(p, room, tolerance));
 }
 
+function pointToSegmentEvidence(p, segment = {}) {
+  if (!point(p) || !point(segment.start) || !point(segment.end)) return null;
+  const ax = Number(segment.start.x), ay = Number(segment.start.y);
+  const bx = Number(segment.end.x), by = Number(segment.end.y);
+  const px = Number(p.x), py = Number(p.y);
+  const dx = bx - ax, dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 4) return null;
+  const projection = ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+  const clampedProjection = Math.max(0, Math.min(1, projection));
+  const nearestX = ax + clampedProjection * dx;
+  const nearestY = ay + clampedProjection * dy;
+  return {
+    distance: Number(Math.hypot(px - nearestX, py - nearestY).toFixed(2)),
+    projection: Number(projection.toFixed(4)),
+    withinSegmentSpan: projection >= 0 && projection <= 1,
+    nearestEndpoint: projection < 0 ? 'start' : projection > 1 ? 'end' : null,
+    endpointDistance: Number(Math.min(
+      Math.hypot(px - ax, py - ay),
+      Math.hypot(px - bx, py - by)
+    ).toFixed(2))
+  };
+}
+
+function nearestWallEvidence(opening, walls = []) {
+  const p = openingPoint(opening);
+  if (!point(p)) return null;
+  const candidates = walls.map((wall, index) => {
+    const evidence = pointToSegmentEvidence(p, wall);
+    if (!evidence) return null;
+    return {
+      wallId: String(wall.id || `wall-${index + 1}`),
+      ...evidence
+    };
+  }).filter(Boolean).sort((a, b) => a.distance - b.distance);
+  return candidates[0] || null;
+}
+
 function segmentLength(segment = {}) {
   if (!point(segment.start) || !point(segment.end)) return 0;
   return Math.hypot(
@@ -166,7 +204,15 @@ function validateFloorplanDraft(draft = {}) {
       }
       const roomsContainingOpening = roomsNearOpening(opening, rooms);
       if (roomsContainingOpening.length === 0) {
-        issues.push({ code: `${kind}-not-associated-with-room`, severity: 'review', entityId: id });
+        // Keep the room-association failure, but expose nearest-wall geometry
+        // so reviewers can distinguish a wall-end/topology issue from a symbol
+        // that is genuinely detached from the plan.
+        issues.push({
+          code: `${kind}-not-associated-with-room`,
+          severity: 'review',
+          entityId: id,
+          nearestWallEvidence: nearestWallEvidence(opening, walls)
+        });
       }
     });
   };
