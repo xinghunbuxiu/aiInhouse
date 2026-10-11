@@ -360,7 +360,29 @@ const bayOutlineAnchorDraft = repairRecognitionTopology({
 const bayOutlineRegression = bayOutlineAnchorDraft.windows.find((opening) => opening.id === 'bay-outline-anchor-regression');
 assert(bayOutlineRegression, 'Bay outline regression candidate must remain available for diagnostics.');
 assert(bayOutlineRegression.sourceEvidence.nearWallEndpoint === true, 'Bay outline endpoint evidence must use the rectangle center, not its top-left coordinate.');
+
 assert(bayOutlineRegression.wallDistance <= 4, 'Bay outline distance evidence must use the same center anchor as endpoint evidence (allowing the topology grid snap).');
+
+const exteriorGapAnchorDraft = repairRecognitionTopology({
+  rooms: [{ id: 'bathroom-gap-room', name: '卫生间', type: 'bathroom', x: 0, y: 0, width: 100, height: 100, confidence: 0.9 }],
+  walls: [{ id: 'bathroom-gap-wall', start: { x: 44, y: 0 }, end: { x: 44, y: 100 }, thickness: 10, confidence: 0.9 }],
+  doors: [],
+  windows: [{
+    id: 'exterior-gap-anchor-regression',
+    type: 'window',
+    source: 'exterior-wall-gap-scanner',
+    x: 40,
+    y: 0,
+    width: 8,
+    height: 66,
+    confidence: 0.8,
+    sourceEvidence: { roomId: 'bathroom-gap-room', inferredFrom: 'exterior-vertical-wall-gap', expectedWallOrientation: 'vertical', acceptedAsExteriorWindow: true }
+  }]
+});
+const exteriorGapRegression = exteriorGapAnchorDraft.windows.find((opening) => opening.id === 'exterior-gap-anchor-regression');
+assert(exteriorGapRegression, 'Exterior wall-gap regression candidate must remain available for diagnostics.');
+assert(exteriorGapRegression.wallDistance <= 4, 'Exterior wall-gap attachment distance must use the opening center, not the top-left coordinate.');
+assert(exteriorGapRegression.sourceEvidence.wallDistance <= 4, 'Exterior wall-gap source evidence must report the same center-based wall distance.');
 
 fs.writeFileSync(path.join(outputDir, 'template-draft.json'), JSON.stringify(templateDraft, null, 2), 'utf8');
 fs.writeFileSync(path.join(outputDir, 'grid-draft.json'), JSON.stringify(gridDraft, null, 2), 'utf8');
