@@ -190,20 +190,28 @@ function wallAxisRange(wall) {
   };
 }
 
-function openingToWallDistance(opening, wall) {
-  const range = wallAxisRange(wall);
-  // Bay-outline scanners emit a bounding rectangle (x/y are top-left), while
-  // attachment validation must compare the symbol's center to the wall span.
-  // Keep the original rectangle coordinates for rendering; use the center only
-  // for distance/span evidence so this stage agrees with spatial validation.
+function openingAttachmentPoint(opening = {}) {
   const bayOutline = opening.source === 'bay-window-outline-scanner'
     || opening.sourceEvidence?.inferredFrom === 'exterior-bay-outline-with-return-support';
   const hasBounds = Number.isFinite(Number(opening.width)) && Number(opening.width) > 0
     && Number.isFinite(Number(opening.height)) && Number(opening.height) > 0;
-  const anchorX = bayOutline && hasBounds ? toNumber(opening.x) + toNumber(opening.width) / 2 : toNumber(opening.x);
-  const anchorY = bayOutline && hasBounds ? toNumber(opening.y) + toNumber(opening.height) / 2 : toNumber(opening.y);
-  const pointFixed = wall.orientation === 'horizontal' ? anchorY : anchorX;
-  const pointAxis = wall.orientation === 'horizontal' ? anchorX : anchorY;
+  return {
+    x: bayOutline && hasBounds
+      ? toNumber(opening.x) + toNumber(opening.width) / 2
+      : toNumber(opening.x),
+    y: bayOutline && hasBounds
+      ? toNumber(opening.y) + toNumber(opening.height) / 2
+      : toNumber(opening.y)
+  };
+}
+
+function openingToWallDistance(opening, wall) {
+  const range = wallAxisRange(wall);
+  // Keep detected rectangle coordinates for rendering, but use one consistent
+  // attachment anchor for distance, endpoint and return-wall evidence.
+  const anchor = openingAttachmentPoint(opening);
+  const pointFixed = wall.orientation === 'horizontal' ? anchor.y : anchor.x;
+  const pointAxis = wall.orientation === 'horizontal' ? anchor.x : anchor.y;
   const clampedAxis = Math.min(Math.max(pointAxis, range.min), range.max);
   const axisDelta = pointAxis - clampedAxis;
   const fixedDelta = pointFixed - range.fixed;
@@ -389,8 +397,9 @@ function attachOpeningToWall(opening, walls = [], type = 'door', rooms = []) {
     ? Math.max(18, openingSpan * 0.9)
     : Math.max(10, openingSpan * 0.65);
   // 墙缝/外轮廓洞口：洞口常落在墙段外侧端点之外，固定轴重合即可视为可贴
+  const attachmentPoint = openingAttachmentPoint(opening);
   const nearWallEndpoint = Math.abs(toNumber(nearest.fixed, 0) - (
-    wall.orientation === 'horizontal' ? toNumber(opening.y) : toNumber(opening.x)
+    wall.orientation === 'horizontal' ? attachmentPoint.y : attachmentPoint.x
   )) <= Math.max(12, toNumber(wall.thickness, 10))
     && Math.abs(toNumber(nearest.axisDelta, 0)) <= Math.max(48, openingSpan * 0.85);
   const withinAttachmentSpan = nearest.withinSpan
@@ -428,8 +437,8 @@ function attachOpeningToWall(opening, walls = [], type = 'door', rooms = []) {
   };
 
   const outlineBridgesReturnWall = opening.sourceEvidence?.inferredFrom === 'exterior-bay-outline-with-return-support'
-    && Math.abs(toNumber(opening.x) - toNumber(nearest.fixed)) <= 14
-    && Math.abs(toNumber(nearest.axisDelta, 0)) <= Math.max(24, toNumber(opening.height, 0) * 0.65);
+    && Math.abs((wall.orientation === 'horizontal' ? attachmentPoint.y : attachmentPoint.x) - toNumber(nearest.fixed)) <= 14
+    && Math.abs(toNumber(nearest.axisDelta, 0)) <= Math.max(24, openingSpan * 0.65);
   if (nearest.distance > maxAttachmentDistance && !outlineBridgesReturnWall && !(gapOrExterior && nearWallEndpoint && nearest.distance <= 64)) {
     reviewReasons.push(`far-from-wall:${Number(nearest.distance.toFixed(1))}`);
   }
