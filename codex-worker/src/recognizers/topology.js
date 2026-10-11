@@ -191,15 +191,22 @@ function wallAxisRange(wall) {
 }
 
 function openingAttachmentPoint(opening = {}) {
-  const bayOutline = opening.source === 'bay-window-outline-scanner'
-    || opening.sourceEvidence?.inferredFrom === 'exterior-bay-outline-with-return-support';
+  // Scanner boxes represent the whole opening, not its top-left corner.
+  // Use their center for bay outlines and exterior wall gaps so distance,
+  // endpoint, and wall-span evidence share one geometric anchor.
+  const inferred = opening.sourceEvidence?.inferredFrom || '';
+  const outlineOrGap = opening.source === 'bay-window-outline-scanner'
+    || opening.source === 'exterior-wall-gap-scanner'
+    || inferred === 'exterior-bay-outline-with-return-support'
+    || inferred === 'exterior-vertical-wall-gap'
+    || inferred === 'exterior-horizontal-wall-gap';
   const hasBounds = Number.isFinite(Number(opening.width)) && Number(opening.width) > 0
     && Number.isFinite(Number(opening.height)) && Number(opening.height) > 0;
   return {
-    x: bayOutline && hasBounds
+    x: outlineOrGap && hasBounds
       ? toNumber(opening.x) + toNumber(opening.width) / 2
       : toNumber(opening.x),
-    y: bayOutline && hasBounds
+    y: outlineOrGap && hasBounds
       ? toNumber(opening.y) + toNumber(opening.height) / 2
       : toNumber(opening.y)
   };
