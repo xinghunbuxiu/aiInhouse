@@ -341,6 +341,27 @@ assert(proposedReadiness.metrics.proposedOpeningCount >= 1, 'Proposed openings m
 assert(proposedReadiness.blockers.includes('proposed-openings-require-review'), 'Proposed openings must block automatic 3D readiness.');
 assert(proposedReadiness.status !== 'ready_for_3d', 'A draft with unresolved proposed openings must not be ready for automatic 3D.');
 
+const bayOutlineAnchorDraft = repairRecognitionTopology({
+  rooms: [{ id: 'bay-room', name: '阳台', type: 'balcony', x: 40, y: 0, width: 80, height: 100, confidence: 0.9 }],
+  walls: [{ id: 'bay-wall', start: { x: 40, y: 50 }, end: { x: 80, y: 50 }, thickness: 10, confidence: 0.9 }],
+  doors: [],
+  windows: [{
+    id: 'bay-outline-anchor-regression',
+    type: 'window',
+    source: 'bay-window-outline-scanner',
+    x: 50,
+    y: 0,
+    width: 8,
+    height: 100,
+    confidence: 0.8,
+    sourceEvidence: { inferredFrom: 'exterior-bay-outline-with-return-support' }
+  }]
+});
+const bayOutlineRegression = bayOutlineAnchorDraft.windows.find((opening) => opening.id === 'bay-outline-anchor-regression');
+assert(bayOutlineRegression, 'Bay outline regression candidate must remain available for diagnostics.');
+assert(bayOutlineRegression.sourceEvidence.nearWallEndpoint === true, 'Bay outline endpoint evidence must use the rectangle center, not its top-left coordinate.');
+assert(bayOutlineRegression.wallDistance === 0, 'Bay outline distance evidence must use the same center anchor as endpoint evidence.');
+
 fs.writeFileSync(path.join(outputDir, 'template-draft.json'), JSON.stringify(templateDraft, null, 2), 'utf8');
 fs.writeFileSync(path.join(outputDir, 'grid-draft.json'), JSON.stringify(gridDraft, null, 2), 'utf8');
 
