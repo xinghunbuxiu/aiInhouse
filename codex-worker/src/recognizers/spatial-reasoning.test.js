@@ -32,6 +32,14 @@ assert.deepEqual(detachedIssue?.nearestWallEvidence, {
   nearestEndpoint: null,
   endpointDistance: 50
 }, 'room-association diagnostics should expose nearest-wall evidence without relaxing the room association gate');
+assert.deepEqual(detachedIssue?.nearestRoomEvidence, {
+  roomId: 'room-a',
+  distanceToBounds: 50,
+  withinBounds: false,
+  withinAssociationTolerance: false,
+  tolerance: 10.5,
+  openingPoint: { x: 150, y: 50 }
+}, 'room-association diagnostics should quantify distance to the nearest valid room without relaxing the association gate');
 
 const farReport = validateFloorplanDraft({ rooms: [room], doors: [farDoor] });
 assert.equal(farReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), true,
