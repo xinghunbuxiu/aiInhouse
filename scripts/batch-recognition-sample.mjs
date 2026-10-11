@@ -213,6 +213,8 @@ export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
     candidateCount,
     matchedCandidateCount,
     unmatchedCandidateCount: unmatchedCandidates.length,
+    // This rate measures asset-ID assignment, not whether the predicted symbol is correct.
+    matchSemantics: 'asset-assignment-not-ground-truth',
     matchRate: candidateCount > 0 ? Number((matchedCandidateCount / candidateCount).toFixed(4)) : null,
     geometryDiagnostics,
     groups,
