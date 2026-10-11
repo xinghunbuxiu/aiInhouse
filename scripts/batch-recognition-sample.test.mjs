@@ -3,7 +3,7 @@ import { buildAssetCoverageAudit } from './batch-recognition-sample.mjs';
 
 const report = buildAssetCoverageAudit({
   geometryCandidates: {
-    lines: [{ id: 'line-1', assetMatch: { assetId: 'wall-interior' } }, { id: 'line-2' }],
+    lines: [{ id: 'line-1', assetMatch: { assetId: 'wall-interior' } }, { id: 'line-2', start: { x: 1, y: 2 }, end: { x: 3, y: 4 }, thickness: 2 }],
     doorSymbolCandidates: [{ id: 'door-1', assetMatch: { assetId: 'door-single-swing' } }],
     windowSymbolCandidates: [{ id: 'window-1', x: 10, y: 20, width: 30, height: 12 }],
     furnitureSymbolCandidates: [{ id: 'furniture-1', type: 'unknown-chair' }],
@@ -35,4 +35,7 @@ assert.equal(report.unclassifiedTextLeadCount, 2);
 assert.equal(report.textReviewLeads[0].text, '主卧');
 assert.equal(report.groups.find((group) => group.kind === 'window').unmatchedCandidates[0].bounds.x, 10);
 assert(report.unmatchedCandidates.some((candidate) => candidate.id === 'mep-1'));
+const unmatchedLine = report.unmatchedCandidates.find((candidate) => candidate.id === 'line-2');
+assert.deepEqual(unmatchedLine.geometryEvidence.start, { x: 1, y: 2 });
+assert.equal(unmatchedLine.geometryEvidence.thickness, 2);
 console.log('Batch recognition asset coverage tests passed.');
