@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildAssetCoverageAudit } from './batch-recognition-sample.mjs';
+import { buildAssetCoverageAudit, serializeSpatialIssues } from './batch-recognition-sample.mjs';
 
 const report = buildAssetCoverageAudit({
   geometryCandidates: {
@@ -42,4 +42,18 @@ assert.equal(report.groups.some((group) => group.kind === 'wall-line'), false);
 const unmatchedMep = report.unmatchedCandidates.find((candidate) => candidate.id === 'mep-1');
 assert.deepEqual(unmatchedMep.geometryEvidence.start, { x: 8, y: 9 });
 assert.equal(unmatchedMep.geometryEvidence.thickness, 3);
-console.log('Batch recognition asset coverage tests passed.');
+const nearestRoomEvidence = { roomId: 'room-nearby', distanceToBounds: 18, withinBounds: false };
+const nearestWallEvidence = { wallId: 'wall-nearby', distance: 2, withinSegmentSpan: true };
+const serializedIssues = serializeSpatialIssues([{
+  code: 'door-not-associated-with-room',
+  severity: 'review',
+  entityId: 'door-detached',
+  nearestRoomEvidence,
+  nearestWallEvidence,
+  internalDebugField: 'must-not-leak'
+}]);
+assert.deepEqual(serializedIssues[0].nearestRoomEvidence, nearestRoomEvidence);
+assert.deepEqual(serializedIssues[0].nearestWallEvidence, nearestWallEvidence);
+assert.equal(Object.hasOwn(serializedIssues[0], 'internalDebugField'), false);
+assert.equal(serializedIssues.length, 1);
+console.log('Batch recognition asset coverage and spatial evidence serialization tests passed.');
