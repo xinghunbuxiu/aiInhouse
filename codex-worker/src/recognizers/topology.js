@@ -192,8 +192,18 @@ function wallAxisRange(wall) {
 
 function openingToWallDistance(opening, wall) {
   const range = wallAxisRange(wall);
-  const pointFixed = wall.orientation === 'horizontal' ? opening.y : opening.x;
-  const pointAxis = wall.orientation === 'horizontal' ? opening.x : opening.y;
+  // Bay-outline scanners emit a bounding rectangle (x/y are top-left), while
+  // attachment validation must compare the symbol's center to the wall span.
+  // Keep the original rectangle coordinates for rendering; use the center only
+  // for distance/span evidence so this stage agrees with spatial validation.
+  const bayOutline = opening.source === 'bay-window-outline-scanner'
+    || opening.sourceEvidence?.inferredFrom === 'exterior-bay-outline-with-return-support';
+  const hasBounds = Number.isFinite(Number(opening.width)) && Number(opening.width) > 0
+    && Number.isFinite(Number(opening.height)) && Number(opening.height) > 0;
+  const anchorX = bayOutline && hasBounds ? toNumber(opening.x) + toNumber(opening.width) / 2 : toNumber(opening.x);
+  const anchorY = bayOutline && hasBounds ? toNumber(opening.y) + toNumber(opening.height) / 2 : toNumber(opening.y);
+  const pointFixed = wall.orientation === 'horizontal' ? anchorY : anchorX;
+  const pointAxis = wall.orientation === 'horizontal' ? anchorX : anchorY;
   const clampedAxis = Math.min(Math.max(pointAxis, range.min), range.max);
   const axisDelta = pointAxis - clampedAxis;
   const fixedDelta = pointFixed - range.fixed;
