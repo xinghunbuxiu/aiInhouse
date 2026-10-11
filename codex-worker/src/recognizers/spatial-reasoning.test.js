@@ -13,6 +13,26 @@ assert.equal(nearReport.issues.some(issue => issue.code === 'door-not-associated
 assert.deepEqual(buildSpatialGraph({ rooms: [room], doors: [nearDoor] }).doorConnections[0].connectedRoomIds, ['room-a'],
   'spatial graph and validation should use the same opening association rule');
 
+const wallNearFarDoor = {
+  id: 'wall-near-far-door',
+  start: { x: 100, y: 0 },
+  end: { x: 100, y: 100 }
+};
+const detachedWithWallReport = validateFloorplanDraft({
+  rooms: [room],
+  walls: [wallNearFarDoor],
+  doors: [farDoor]
+});
+const detachedIssue = detachedWithWallReport.issues.find(issue => issue.code === 'door-not-associated-with-room');
+assert.deepEqual(detachedIssue?.nearestWallEvidence, {
+  wallId: 'wall-near-far-door',
+  distance: 50,
+  projection: 0.5,
+  withinSegmentSpan: true,
+  nearestEndpoint: null,
+  endpointDistance: 50
+}, 'room-association diagnostics should expose nearest-wall evidence without relaxing the room association gate');
+
 const farReport = validateFloorplanDraft({ rooms: [room], doors: [farDoor] });
 assert.equal(farReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), true,
   'opening far from all rooms must remain flagged');
