@@ -165,6 +165,18 @@ export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
             ? { x: candidate.x, y: candidate.y, width: candidate.width ?? null, height: candidate.height ?? null }
             : null
         ),
+        geometryEvidence: {
+          start: candidate.start || null,
+          end: candidate.end || null,
+          polygon: Array.isArray(candidate.polygon) ? candidate.polygon : null,
+          width: candidate.width ?? null,
+          height: candidate.height ?? null,
+          thickness: candidate.thickness ?? null,
+          area: candidate.area ?? null,
+          lineStyle: candidate.lineStyle || null,
+          tone: candidate.tone || candidate.wallEvidence?.tone || null,
+          wallRejectReasons: candidate.wallRejectReasons || candidate.wallEvidence?.reasons || candidate.rejectReasons || []
+        },
         reviewHint: '先检查原图对应局部与识别特征；确认是有效图元且现有图例不匹配后，再新增图元或变体'
       }))
     };
