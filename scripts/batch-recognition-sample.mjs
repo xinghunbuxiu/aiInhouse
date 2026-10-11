@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { buildRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
 const { validateFloorplanDraft } = require('../codex-worker/src/recognizers/spatial-reasoning.js');
+const { loadRecognitionAssetCatalog } = require('../codex-worker/src/assets/recognition-assets.js');
 
 function getArg(flag, fallback = '') {
   const index = process.argv.indexOf(flag);
@@ -181,7 +182,39 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
   const blockingReasons = readiness.blockingReasons || [];
   const requiresHumanReview = readiness.status === 'needs_human_review'
     || blockingReasons.some((reason) => /review|复核|人工/i.test(String(reason)))
-    || Boolean(repaired.quality?.needsReview);
+    || Boolean(repaired.quality?.needsReview)
+    || Boolean(spatialValidation.reviewRequired)
+    || !spatialValidation.valid;
+
+  // Produce an actionable asset-coverage report from the real image run. A
+  // candidate without an asset match is not automatically a missing symbol:
+  // it is a review lead that can be compared with the source crop and catalog.
+  const assetCatalog = loadRecognitionAssetCatalog();
+  const geometry = preprocessing.geometryCandidates || {};
+  const symbolCandidates = [
+    ...(geometry.doorSymbolCandidates || []).map((candidate) => ({ kind: 'door', candidate })),
+    ...(geometry.windowSymbolCandidates || []).map((candidate) => ({ kind: 'window', candidate }))
+  ];
+  const unmatchedSymbolCandidates = symbolCandidates
+    .filter(({ candidate }) => !candidate.assetMatch?.assetId)
+    .map(({ kind, candidate }, index) => ({
+      id: candidate.id || candidate.candidateId || `${kind}-unmatched-${index + 1}`,
+      kind,
+      source: candidate.source || 'unknown',
+      orientation: candidate.orientation || null,
+      confidence: candidate.confidence ?? null,
+      bounds: candidate.bounds || candidate.rect || null,
+      reviewHint: '检查原图局部；若与现有图元库不匹配，再补充图元或变体'
+    }));
+  const assetCoverage = {
+    catalogVersion: assetCatalog.version || 'unknown',
+    catalogSymbolCount: (assetCatalog.symbols || []).length,
+    catalogCategoryCount: (assetCatalog.categories || []).length,
+    symbolCandidateCount: symbolCandidates.length,
+    matchedCandidateCount: symbolCandidates.length - unmatchedSymbolCandidates.length,
+    unmatchedCandidateCount: unmatchedSymbolCandidates.length,
+    unmatchedSymbolCandidates
+  };
 
   return {
     image: filePath,
@@ -249,7 +282,10 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
       suppressed: repaired.topology?.suppressedOpenings || []
     },
     attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
-    readinessStatus: readiness.status || 'unknown',
+    readinessStatus: !spatialValidation.valid || spatialValidation.reviewRequired || requiresHumanReview
+      ? 'needs_human_review'
+      : (readiness.status || 'unknown'),
+    assetCoverage,
     readinessScore: readiness.score ?? null,
     requiresHumanReview,
     blockingReasons,
