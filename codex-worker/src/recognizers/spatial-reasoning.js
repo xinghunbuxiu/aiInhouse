@@ -346,11 +346,21 @@ function validateFloorplanDraft(draft = {}) {
       geometry
     };
   };
+  const openingById = new Map([
+    ...doors.map((entity, index) => [String(entity.id || `door-${index + 1}`), entity]),
+    ...windows.map((entity, index) => [String(entity.id || `window-${index + 1}`), entity])
+  ]);
   const enrichedIssues = issues.map(issue => {
     const matches = evidenceEntities.filter(entry => entry.id === String(issue.entityId || ''));
     const relatedMatches = evidenceEntities.filter(entry => entry.id === String(issue.relatedEntityId || ''));
+    const opening = openingById.get(String(issue.entityId || ''));
+    const openingDiagnostics = opening ? {
+      nearestRoomEvidence: nearestRoomEvidence(opening, rooms),
+      nearestWallEvidence: nearestWallEvidence(opening, walls)
+    } : {};
     return {
       ...issue,
+      ...openingDiagnostics,
       ...(matches.length ? { entityEvidence: matches.map(describeEvidence) } : {}),
       ...(relatedMatches.length ? { relatedEntityEvidence: relatedMatches.map(describeEvidence) } : {})
     };
