@@ -66,6 +66,17 @@ assert.equal(attachmentReport.issues.some(issue => issue.code === 'opening-wall-
   'an existing wall ID must not override explicit evidence that the opening falls outside the wall span');
 assert.equal(attachmentReport.metrics.wallAttachedOpeningCount, 0,
   'contradictory attachment evidence must not count as a verified wall attachment');
+const attachmentConflict = attachmentReport.issues.find(issue => issue.code === 'opening-wall-attachment-evidence-conflict');
+assert.deepEqual(attachmentConflict?.nearestWallEvidence, {
+  wallId: 'wall-a',
+  distance: 10,
+  projection: 0.5,
+  withinSegmentSpan: true,
+  nearestEndpoint: null,
+  endpointDistance: 50
+}, 'attachment conflicts should include independently computed nearest-wall geometry evidence');
+assert.equal(attachmentConflict?.nearestRoomEvidence?.roomId, 'room-a',
+  'attachment conflicts should include nearest-room evidence for triage');
 
 const overlapReport = validateFloorplanDraft({
   rooms: [
