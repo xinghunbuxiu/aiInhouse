@@ -129,6 +129,77 @@ function runPreprocess(jobFile, outputDir) {
   }
 }
 
+const ASSET_COVERAGE_GROUPS = [
+  ['wall-line', 'lines'],
+  ['door', 'doorSymbolCandidates'],
+  ['window', 'windowSymbolCandidates'],
+  ['furniture', 'furnitureSymbolCandidates'],
+  ['annotation', 'annotationSymbolCandidates'],
+  ['balcony', 'balconyCandidates'],
+  ['structural-vector', 'structuralWallVectors'],
+  ['plumbing-hvac', 'mepSymbolCandidates'],
+  ['electrical', 'electricalSymbolCandidates']
+];
+
+export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
+  const geometry = preprocessing.geometryCandidates || {};
+  const groups = ASSET_COVERAGE_GROUPS.map(([kind, key]) => {
+    const candidates = Array.isArray(geometry[key]) ? geometry[key] : [];
+    const matched = candidates.filter((candidate) => Boolean(candidate.assetMatch?.assetId)).length;
+    const unmatched = candidates.filter((candidate) => !candidate.assetMatch?.assetId);
+    return {
+      kind,
+      sourceKey: key,
+      candidateCount: candidates.length,
+      matchedCandidateCount: matched,
+      unmatchedCandidateCount: unmatched.length,
+      unmatchedCandidates: unmatched.map((candidate, index) => ({
+        id: candidate.id || candidate.candidateId || `${kind}-unmatched-${index + 1}`,
+        kind,
+        type: candidate.type || candidate.kind || candidate.label || null,
+        source: candidate.source || 'unknown',
+        orientation: candidate.orientation || null,
+        confidence: candidate.confidence ?? null,
+        bounds: candidate.bounds || candidate.rect || (
+          Number.isFinite(candidate.x) && Number.isFinite(candidate.y)
+            ? { x: candidate.x, y: candidate.y, width: candidate.width ?? null, height: candidate.height ?? null }
+            : null
+        ),
+        reviewHint: '先检查原图对应局部与识别特征；确认是有效图元且现有图例不匹配后，再新增图元或变体'
+      }))
+    };
+  });
+  const unmatchedCandidates = groups.flatMap((group) => group.unmatchedCandidates);
+  const ocrCandidates = Array.isArray(preprocessing.ocrCandidates) ? preprocessing.ocrCandidates : [];
+  const textReviewLeads = ocrCandidates
+    .filter((candidate) => {
+      const text = String(candidate.text || candidate.value || candidate.label || '').trim();
+      return text.length > 0 && !candidate.assetMatch?.assetId;
+    })
+    .slice(0, 100)
+    .map((candidate, index) => ({
+      id: candidate.id || candidate.candidateId || `ocr-text-${index + 1}`,
+      text: String(candidate.text || candidate.value || candidate.label || '').trim().slice(0, 120),
+      bounds: candidate.bounds || candidate.rect || null,
+      reviewHint: '这是未归类文字线索，不等同于缺失图元；先判断是房间名、尺寸、设备编号还是图纸注释'
+    }));
+  const candidateCount = groups.reduce((sum, group) => sum + group.candidateCount, 0);
+  const matchedCandidateCount = groups.reduce((sum, group) => sum + group.matchedCandidateCount, 0);
+  return {
+    catalogVersion: catalog.version || 'unknown',
+    catalogSymbolCount: (catalog.symbols || []).length,
+    catalogCategoryCount: (catalog.categories || []).length,
+    candidateCount,
+    matchedCandidateCount,
+    unmatchedCandidateCount: unmatchedCandidates.length,
+    groups,
+    unmatchedCandidates,
+    ocrCandidateCount: ocrCandidates.length,
+    unclassifiedTextLeadCount: textReviewLeads.length,
+    textReviewLeads
+  };
+}
+
 export function countVerifiedAttachedOpenings(openings = [], walls = []) {
   const wallIds = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
   return openings.filter((item) => {
@@ -190,31 +261,7 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
   // candidate without an asset match is not automatically a missing symbol:
   // it is a review lead that can be compared with the source crop and catalog.
   const assetCatalog = loadRecognitionAssetCatalog();
-  const geometry = preprocessing.geometryCandidates || {};
-  const symbolCandidates = [
-    ...(geometry.doorSymbolCandidates || []).map((candidate) => ({ kind: 'door', candidate })),
-    ...(geometry.windowSymbolCandidates || []).map((candidate) => ({ kind: 'window', candidate }))
-  ];
-  const unmatchedSymbolCandidates = symbolCandidates
-    .filter(({ candidate }) => !candidate.assetMatch?.assetId)
-    .map(({ kind, candidate }, index) => ({
-      id: candidate.id || candidate.candidateId || `${kind}-unmatched-${index + 1}`,
-      kind,
-      source: candidate.source || 'unknown',
-      orientation: candidate.orientation || null,
-      confidence: candidate.confidence ?? null,
-      bounds: candidate.bounds || candidate.rect || null,
-      reviewHint: '检查原图局部；若与现有图元库不匹配，再补充图元或变体'
-    }));
-  const assetCoverage = {
-    catalogVersion: assetCatalog.version || 'unknown',
-    catalogSymbolCount: (assetCatalog.symbols || []).length,
-    catalogCategoryCount: (assetCatalog.categories || []).length,
-    symbolCandidateCount: symbolCandidates.length,
-    matchedCandidateCount: symbolCandidates.length - unmatchedSymbolCandidates.length,
-    unmatchedCandidateCount: unmatchedSymbolCandidates.length,
-    unmatchedSymbolCandidates
-  };
+  const assetCoverage = buildAssetCoverageAudit(preprocessing, assetCatalog);
 
   return {
     image: filePath,
