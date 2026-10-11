@@ -59,6 +59,32 @@ function roomsNearOpening(opening, rooms = []) {
   return rooms.filter(room => pointInRoom(p, room, tolerance));
 }
 
+function nearestRoomEvidence(opening, rooms = []) {
+  const p = openingPoint(opening);
+  if (!point(p)) return null;
+  const tolerance = openingRoomTolerance(opening);
+  const candidates = rooms
+    .filter(room => [room.x, room.y, room.width, room.height].every(finite)
+      && Number(room.width) > 0 && Number(room.height) > 0)
+    .map((room, index) => {
+      const left = Number(room.x), top = Number(room.y);
+      const right = left + Number(room.width), bottom = top + Number(room.height);
+      const dx = Math.max(left - Number(p.x), 0, Number(p.x) - right);
+      const dy = Math.max(top - Number(p.y), 0, Number(p.y) - bottom);
+      const distanceToBounds = Math.hypot(dx, dy);
+      return {
+        roomId: String(room.id || `room-${index + 1}`),
+        distanceToBounds: Number(distanceToBounds.toFixed(2)),
+        withinBounds: distanceToBounds === 0,
+        withinAssociationTolerance: distanceToBounds <= tolerance,
+        tolerance: Number(tolerance.toFixed(2)),
+        openingPoint: { x: Number(Number(p.x).toFixed(2)), y: Number(Number(p.y).toFixed(2)) }
+      };
+    })
+    .sort((a, b) => a.distanceToBounds - b.distanceToBounds);
+  return candidates[0] || null;
+}
+
 function pointToSegmentEvidence(p, segment = {}) {
   if (!point(p) || !point(segment.start) || !point(segment.end)) return null;
   const ax = Number(segment.start.x), ay = Number(segment.start.y);
@@ -211,6 +237,7 @@ function validateFloorplanDraft(draft = {}) {
           code: `${kind}-not-associated-with-room`,
           severity: 'review',
           entityId: id,
+          nearestRoomEvidence: nearestRoomEvidence(opening, rooms),
           nearestWallEvidence: nearestWallEvidence(opening, walls)
         });
       }
