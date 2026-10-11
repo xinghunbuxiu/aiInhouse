@@ -24,9 +24,9 @@ const report = buildAssetCoverageAudit({
   categories: [{ id: 'structure' }]
 });
 
-assert.equal(report.candidateCount, 8);
+assert.equal(report.candidateCount, 6);
 assert.equal(report.matchedCandidateCount, 4);
-assert.equal(report.unmatchedCandidateCount, 4);
+assert.equal(report.unmatchedCandidateCount, 2);
 assert.deepEqual(report.groups.map((group) => group.kind), [
   'wall-line', 'door', 'window', 'furniture', 'annotation',
   'balcony', 'structural-vector', 'plumbing-hvac', 'electrical'
@@ -35,6 +35,10 @@ assert.equal(report.unclassifiedTextLeadCount, 2);
 assert.equal(report.textReviewLeads[0].text, '主卧');
 assert.equal(report.groups.find((group) => group.kind === 'window').unmatchedCandidates[0].bounds.x, 10);
 assert(report.unmatchedCandidates.some((candidate) => candidate.id === 'mep-1'));
+assert.equal(report.geometryDiagnostics.wallLineCandidateCount, 2);
+assert.equal(report.geometryDiagnostics.structuralWallVectorCount, 0);
+assert.equal(report.matchRate, 0.6667);
+assert.equal(report.groups.some((group) => group.kind === 'wall-line'), false);
 const unmatchedLine = report.unmatchedCandidates.find((candidate) => candidate.id === 'line-2');
 assert.deepEqual(unmatchedLine.geometryEvidence.start, { x: 1, y: 2 });
 assert.equal(unmatchedLine.geometryEvidence.thickness, 2);
