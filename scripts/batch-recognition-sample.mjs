@@ -130,13 +130,11 @@ function runPreprocess(jobFile, outputDir) {
 }
 
 const ASSET_COVERAGE_GROUPS = [
-  ['wall-line', 'lines'],
   ['door', 'doorSymbolCandidates'],
   ['window', 'windowSymbolCandidates'],
   ['furniture', 'furnitureSymbolCandidates'],
   ['annotation', 'annotationSymbolCandidates'],
   ['balcony', 'balconyCandidates'],
-  ['structural-vector', 'structuralWallVectors'],
   ['plumbing-hvac', 'mepSymbolCandidates'],
   ['electrical', 'electricalSymbolCandidates']
 ];
@@ -195,6 +193,17 @@ export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
       bounds: candidate.bounds || candidate.rect || null,
       reviewHint: '这是未归类文字线索，不等同于缺失图元；先判断是房间名、尺寸、设备编号还是图纸注释'
     }));
+  // Geometry primitives (wall-grid lines and structural wall vectors) are
+  // not symbols. Keep them visible as diagnostics, but exclude them from the
+  // symbol-asset match rate to avoid reporting a valid support line as a
+  // missing catalog glyph.
+  const geometryDiagnostics = {
+    wallLineCandidateCount: Array.isArray(geometry.lines) ? geometry.lines.length : 0,
+    structuralWallVectorCount: Array.isArray(geometry.structuralWallVectors) ? geometry.structuralWallVectors.length : 0,
+    wallGridSupportLineCount: Array.isArray(geometry.lines)
+      ? geometry.lines.filter((candidate) => /wall-grid-support-line/.test(String(candidate.source || ''))).length
+      : 0
+  };
   const candidateCount = groups.reduce((sum, group) => sum + group.candidateCount, 0);
   const matchedCandidateCount = groups.reduce((sum, group) => sum + group.matchedCandidateCount, 0);
   return {
@@ -204,6 +213,8 @@ export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
     candidateCount,
     matchedCandidateCount,
     unmatchedCandidateCount: unmatchedCandidates.length,
+    matchRate: candidateCount > 0 ? Number((matchedCandidateCount / candidateCount).toFixed(4)) : null,
+    geometryDiagnostics,
     groups,
     unmatchedCandidates,
     ocrCandidateCount: ocrCandidates.length,
