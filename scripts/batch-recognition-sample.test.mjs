@@ -10,7 +10,7 @@ const report = buildAssetCoverageAudit({
     annotationSymbolCandidates: [],
     balconyCandidates: [{ id: 'balcony-1', assetMatch: { assetId: 'balcony-outline' } }],
     structuralWallVectors: [],
-    mepSymbolCandidates: [{ id: 'mep-1', type: 'unknown-fixture', confidence: 0.42 }],
+    mepSymbolCandidates: [{ id: 'mep-1', type: 'unknown-fixture', confidence: 0.42, start: { x: 8, y: 9 }, end: { x: 18, y: 19 }, thickness: 3 }],
     electricalSymbolCandidates: [{ id: 'electrical-1', assetMatch: { assetId: 'electrical-distribution-box' } }]
   },
   ocrCandidates: [
@@ -28,8 +28,8 @@ assert.equal(report.candidateCount, 6);
 assert.equal(report.matchedCandidateCount, 3);
 assert.equal(report.unmatchedCandidateCount, 3);
 assert.deepEqual(report.groups.map((group) => group.kind), [
-  'wall-line', 'door', 'window', 'furniture', 'annotation',
-  'balcony', 'structural-vector', 'plumbing-hvac', 'electrical'
+  'door', 'window', 'furniture', 'annotation',
+  'balcony', 'plumbing-hvac', 'electrical'
 ]);
 assert.equal(report.unclassifiedTextLeadCount, 2);
 assert.equal(report.textReviewLeads[0].text, '主卧');
@@ -39,7 +39,7 @@ assert.equal(report.geometryDiagnostics.wallLineCandidateCount, 2);
 assert.equal(report.geometryDiagnostics.structuralWallVectorCount, 0);
 assert.equal(report.matchRate, 0.5);
 assert.equal(report.groups.some((group) => group.kind === 'wall-line'), false);
-const unmatchedLine = report.unmatchedCandidates.find((candidate) => candidate.id === 'line-2');
-assert.deepEqual(unmatchedLine.geometryEvidence.start, { x: 1, y: 2 });
-assert.equal(unmatchedLine.geometryEvidence.thickness, 2);
+const unmatchedMep = report.unmatchedCandidates.find((candidate) => candidate.id === 'mep-1');
+assert.deepEqual(unmatchedMep.geometryEvidence.start, { x: 8, y: 9 });
+assert.equal(unmatchedMep.geometryEvidence.thickness, 3);
 console.log('Batch recognition asset coverage tests passed.');
