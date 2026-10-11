@@ -238,6 +238,20 @@ export function countVerifiedAttachedOpenings(openings = [], walls = []) {
   }).length;
 }
 
+export function serializeSpatialIssues(issues = []) {
+  return issues.map(({
+    code, severity, message, entityId, relatedEntityId, overlap,
+    entityEvidence, relatedEntityEvidence, nearestRoomEvidence, nearestWallEvidence
+  }) => ({
+    code, severity, message, entityId, relatedEntityId,
+    ...(overlap ? { overlap } : {}),
+    ...(entityEvidence ? { entityEvidence } : {}),
+    ...(relatedEntityEvidence ? { relatedEntityEvidence } : {}),
+    ...(nearestRoomEvidence ? { nearestRoomEvidence } : {}),
+    ...(nearestWallEvidence ? { nearestWallEvidence } : {})
+  }));
+}
+
 function evaluateImage(filePath, outputDir, layoutOverride = '') {
   fs.mkdirSync(outputDir, { recursive: true });
   const jobFile = writeJob(filePath, outputDir, layoutOverride);
@@ -373,17 +387,7 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
       issuesByCode: spatialValidation.metrics?.issuesByCode || {},
       // Keep the geometric evidence in the published artifact so each review
       // item can be traced to source entities and measured intersections.
-      issues: (spatialValidation.issues || []).map(({
-        code, severity, message, entityId, relatedEntityId, overlap,
-        entityEvidence, relatedEntityEvidence, nearestRoomEvidence, nearestWallEvidence
-      }) => ({
-        code, severity, message, entityId, relatedEntityId,
-        ...(overlap ? { overlap } : {}),
-        ...(entityEvidence ? { entityEvidence } : {}),
-        ...(relatedEntityEvidence ? { relatedEntityEvidence } : {}),
-        ...(nearestRoomEvidence ? { nearestRoomEvidence } : {}),
-        ...(nearestWallEvidence ? { nearestWallEvidence } : {})
-      })),
+      issues: serializeSpatialIssues(spatialValidation.issues || []),
       roomBounds: (repaired.rooms || []).map((room) => ({
         id: room.id || null,
         name: room.name || null,
