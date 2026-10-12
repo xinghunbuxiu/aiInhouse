@@ -49,5 +49,6 @@ jobs:
             tmp/sample-floorplan-eval/summary.json
             tmp/sample-floorplan-eval/geometry-debug/geometry-feature-summary.json
             tmp/sample-floorplan-eval/geometry-debug/geometry-feature-overlay.svg
+            tmp/sample-floorplan-eval/geometry-debug/structural-feature-overlay.svg
           if-no-files-found: warn
       - run: npm run build
