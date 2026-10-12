@@ -68,7 +68,8 @@ const height = Number(dimensions.height) || 976;
 fs.mkdirSync(outputDir, { recursive: true });
 const summaryPath = path.join(outputDir, 'geometry-feature-summary.json');
 const allOverlayPath = path.join(outputDir, 'geometry-feature-overlay.svg');
-const structuralOverlayPath = path.join(outputDir, 'structural-feature-overlay.svg');\nconst mergedOverlayPath = path.join(outputDir, 'merged-geometry-overlay.svg');
+const structuralOverlayPath = path.join(outputDir, 'structural-feature-overlay.svg');
+const mergedOverlayPath = path.join(outputDir, 'merged-geometry-overlay.svg');
 fs.writeFileSync(summaryPath, JSON.stringify({
   image: path.basename(imagePath),
   coordinateSpace: 'input-image-pixels',
@@ -86,7 +87,8 @@ fs.writeFileSync(summaryPath, JSON.stringify({
   }
 }, null, 2));
 fs.writeFileSync(allOverlayPath, renderOverlay(allFeatures, imageData, width, height, 'all'));
-fs.writeFileSync(structuralOverlayPath, renderOverlay(structuralFeatures, imageData, width, height, 'structural'));\nfs.writeFileSync(mergedOverlayPath, renderOverlay(mergedFeatures, imageData, width, height, 'structural'));
+fs.writeFileSync(structuralOverlayPath, renderOverlay(structuralFeatures, imageData, width, height, 'structural'));
+fs.writeFileSync(mergedOverlayPath, renderOverlay(mergedFeatures, imageData, width, height, 'structural'));
 console.log(JSON.stringify({
   image: path.basename(imagePath),
   summaryPath,
