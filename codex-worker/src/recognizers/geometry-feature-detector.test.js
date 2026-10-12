@@ -42,6 +42,7 @@ const invalid = extractGeometryFeatures([
   { id: 'zero', start: { x: 4, y: 4 }, end: { x: 4, y: 4 } },
   { id: 'bad', start: { x: null, y: 0 }, end: { x: 10, y: 0 } }
 ]);
-assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');\nassert.equal(invalid.mergedLines.length, 0, 'invalid and zero-length segments must not create merged geometry');
+assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');
+assert.equal(invalid.mergedLines.length, 0, 'invalid and zero-length segments must not create merged geometry');
 
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
