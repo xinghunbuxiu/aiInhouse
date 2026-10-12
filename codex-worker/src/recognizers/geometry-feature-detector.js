@@ -161,7 +161,8 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     maximumParallelDistance: Number.isFinite(config.maximumParallelDistance) ? config.maximumParallelDistance : 80,
     minimumParallelOverlap: Number.isFinite(config.minimumParallelOverlap) ? config.minimumParallelOverlap : 20
   };
-  const lines = inputLines.map(normalizeSegment).filter(Boolean);\n  const mergedLines = mergeCollinearSegments(inputLines, config);
+  const lines = inputLines.map(normalizeSegment).filter(Boolean);
+  const mergedLines = mergeCollinearSegments(inputLines, config);
   const rawPoints = [];
   lines.forEach(line => rawPoints.push(line.start, line.end));
   const rawIntersections = [];
@@ -210,14 +211,16 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     coordinateSpace: 'input-image-pixels',
     summary: {
       inputLineCount: inputLines.length,
-      validLineCount: lines.length,\n      mergedCollinearLineCount: mergedLines.length,
+      validLineCount: lines.length,
+      mergedCollinearLineCount: mergedLines.length,
       pointCount: points.length,
       junctionCounts: counts,
       properIntersectionCount: rawIntersections.length,
       parallelPairCount: parallelGroups.length,
       lineSourceCounts: sourceCounts
     },
-    mergedLines,\n    lines: lines.map(line => ({
+    mergedLines,
+    lines: lines.map(line => ({
       id: line.id,
       source: line.source,
       confidence: line.confidence,
