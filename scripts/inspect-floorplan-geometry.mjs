@@ -42,14 +42,18 @@ const colors = {
   'cross-junction': '#b197fc',
   junction: '#ffffff'
 };
+const lineColor = line => /dimension|annotation|leader|text|measure/i.test(line.source) ? '#ff8c42'
+  : /wall|structural|morphology/i.test(line.source) ? '#00e676' : '#42a5f5';
 const lineSvg = features.lines.map(line =>
-  `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="#00e676" stroke-width="2" opacity=".85"><title>${escapeXml(line.id)} · ${line.length}px</title></line>`
+  `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${lineColor(line)}" stroke-width="2" opacity=".85"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}</title></line>`
 ).join('');
 const pointSvg = features.points.map(point =>
   `<circle cx="${point.x}" cy="${point.y}" r="${point.type === 'cross-junction' || point.type === 't-junction' ? 5 : 3}" fill="${colors[point.type] || colors.junction}" stroke="#111" stroke-width="1"><title>${escapeXml(point.id)} · ${escapeXml(point.type)} · degree ${point.degree} · ${escapeXml(point.incidentLineIds.join(', '))}</title></circle>`
 ).join('');
 const legend = [
-  ['#00e676', '线段候选'],
+  ['#00e676', '墙/结构来源线'],
+  ['#ff8c42', '尺寸/标注来源线'],
+  ['#42a5f5', '其他来源线'],
   [colors.endpoint, '端点'],
   [colors.corner, '角点'],
   [colors['t-junction'], 'T 连接'],
