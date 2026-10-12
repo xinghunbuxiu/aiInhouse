@@ -35,7 +35,7 @@ jobs:
           AIINHOUSE_PYTHON_BIN: python
         run: node scripts/batch-recognition-sample.mjs --image "./WX20260329-112615@2x.png" --output "./tmp/sample-floorplan-eval"
       - name: Build geometry feature overlay for the real sample
-        run: node scripts/inspect-floorplan-geometry.mjs --image "./WX20260329-112615@2x.png" --preprocess "./tmp/sample-floorplan-eval/recognition-preprocess.json" --output "./tmp/sample-floorplan-eval/geometry-debug"
+        run: node scripts/inspect-floorplan-geometry.mjs --image "./WX20260329-112615@2x.png" --preprocess "$(find ./tmp/sample-floorplan-eval -name recognition-preprocess.json -print -quit)" --output "./tmp/sample-floorplan-eval/geometry-debug"
       - name: Fail if the real sample silently skips visual recognition
         if: always()
         run: |
