@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { extractGeometryFeatures } = require('./geometry-feature-detector');
+const { extractGeometryFeatures, mergeCollinearSegments } = require('./geometry-feature-detector');
 
 const lines = [
   { id: 'horizontal', start: { x: 0, y: 50 }, end: { x: 100, y: 50 } },
@@ -27,10 +27,21 @@ assert(cross.intersections.some(item => Math.abs(item.point.x - 20) < 0.01 && Ma
 assert(cross.points.some(point => point.type === 'cross-junction' && point.degree === 4),
   'a full horizontal/vertical crossing must expose four rays');
 
+const merged = mergeCollinearSegments([
+  { id: 'wall-a', source: 'wall-band', start: { x: 0, y: 10 }, end: { x: 40, y: 10 } },
+  { id: 'wall-b', source: 'wall-band', start: { x: 43, y: 11 }, end: { x: 80, y: 10 } },
+  { id: 'annotation', source: 'dimension-line', start: { x: 0, y: 24 }, end: { x: 80, y: 24 } }
+], { mergeDistanceTolerance: 3, mergeGapTolerance: 5 });
+assert.equal(merged.length, 2, 'near-collinear segments should merge, while a distant parallel annotation remains separate');
+assert.deepEqual(merged.find(line => line.sourceIds.includes('wall-a')).sourceIds, ['wall-a', 'wall-b'],
+  'merged geometry must retain traceable source segment IDs');
+assert(merged.find(line => line.sourceIds.includes('wall-a')).length >= 79,
+  'merged geometry should span the combined supported wall segments');
+
 const invalid = extractGeometryFeatures([
   { id: 'zero', start: { x: 4, y: 4 }, end: { x: 4, y: 4 } },
   { id: 'bad', start: { x: null, y: 0 }, end: { x: 10, y: 0 } }
 ]);
-assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');
+assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');\nassert.equal(invalid.mergedLines.length, 0, 'invalid and zero-length segments must not create merged geometry');
 
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
