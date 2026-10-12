@@ -17,6 +17,9 @@ function normalizeSegment(line, index) {
   if (length < 2) return null;
   return {
     id: String(line.id || `line-${index + 1}`),
+    source: String(line.source || 'unknown'),
+    confidence: finite(line.confidence) ? Number(line.confidence) : null,
+    orientation: String(line.orientation || ''),
     start, end, dx, dy, length,
     angle: Math.atan2(dy, dx)
   };
@@ -139,6 +142,10 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       if (evidence) parallelGroups.push({ id: `parallel-pair-${parallelGroups.length + 1}`, ...evidence });
     }
   }
+  const sourceCounts = lines.reduce((result, line) => {
+    result[line.source] = (result[line.source] || 0) + 1;
+    return result;
+  }, {});
   const counts = points.reduce((result, point) => {
     result[point.type] = (result[point.type] || 0) + 1;
     return result;
@@ -152,10 +159,14 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       pointCount: points.length,
       junctionCounts: counts,
       properIntersectionCount: rawIntersections.length,
-      parallelPairCount: parallelGroups.length
+      parallelPairCount: parallelGroups.length,
+      lineSourceCounts: sourceCounts
     },
     lines: lines.map(line => ({
       id: line.id,
+      source: line.source,
+      confidence: line.confidence,
+      orientation: line.orientation,
       start: line.start,
       end: line.end,
       length: Number(line.length.toFixed(2)),
