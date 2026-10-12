@@ -98,6 +98,61 @@ function parallelPairEvidence(a, b, options) {
   };
 }
 
+function mergeCollinearSegments(inputLines = [], config = {}) {
+  const angleTolerance = (Number.isFinite(config.mergeAngleToleranceDegrees) ? config.mergeAngleToleranceDegrees : 2) * Math.PI / 180;
+  const distanceTolerance = Number.isFinite(config.mergeDistanceTolerance) ? config.mergeDistanceTolerance : 4;
+  const gapTolerance = Number.isFinite(config.mergeGapTolerance) ? config.mergeGapTolerance : 8;
+  const sourceLines = inputLines.map(normalizeSegment).filter(Boolean);
+  const groups = [];
+  for (const line of sourceLines) {
+    const ux = line.dx / line.length, uy = line.dy / line.length;
+    let target = null;
+    for (const group of groups) {
+      const angle = Math.acos(Math.min(1, Math.abs(ux * group.ux + uy * group.uy)));
+      if (angle > angleTolerance) continue;
+      const perpendicularDistance = Math.abs((line.start.x - group.origin.x) * group.uy - (line.start.y - group.origin.y) * group.ux);
+      if (perpendicularDistance > distanceTolerance) continue;
+      const project = p => (p.x - group.origin.x) * group.ux + (p.y - group.origin.y) * group.uy;
+      const start = Math.min(project(line.start), project(line.end));
+      const end = Math.max(project(line.start), project(line.end));
+      if (start > group.end + gapTolerance || end < group.start - gapTolerance) continue;
+      target = group;
+      const projections = [project(line.start), project(line.end)];
+      group.start = Math.min(group.start, ...projections);
+      group.end = Math.max(group.end, ...projections);
+      group.sourceIds.push(line.id);
+      if (line.source !== group.source) group.source = 'mixed';
+      break;
+    }
+    if (!target) {
+      const uxCanonical = ux < -1e-8 || (Math.abs(ux) <= 1e-8 && uy < 0) ? -ux : ux;
+      const uyCanonical = ux < -1e-8 || (Math.abs(ux) <= 1e-8 && uy < 0) ? -uy : uy;
+      const origin = { ...line.start };
+      const project = p => (p.x - origin.x) * uxCanonical + (p.y - origin.y) * uyCanonical;
+      const projections = [project(line.start), project(line.end)];
+      groups.push({
+        ux: uxCanonical, uy: uyCanonical, origin,
+        start: Math.min(...projections), end: Math.max(...projections),
+        sourceIds: [line.id], source: line.source
+      });
+    }
+  }
+  return groups.map((group, index) => ({
+    id: `merged-line-${index + 1}`,
+    source: group.source,
+    sourceIds: group.sourceIds.slice().sort(),
+    start: {
+      x: Number((group.origin.x + group.ux * group.start).toFixed(2)),
+      y: Number((group.origin.y + group.uy * group.start).toFixed(2))
+    },
+    end: {
+      x: Number((group.origin.x + group.ux * group.end).toFixed(2)),
+      y: Number((group.origin.y + group.uy * group.end).toFixed(2))
+    },
+    length: Number((group.end - group.start).toFixed(2))
+  }));
+}
+
 function extractGeometryFeatures(inputLines = [], config = {}) {
   const options = {
     snapTolerance: Number.isFinite(config.snapTolerance) ? config.snapTolerance : 4,
@@ -106,7 +161,7 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     maximumParallelDistance: Number.isFinite(config.maximumParallelDistance) ? config.maximumParallelDistance : 80,
     minimumParallelOverlap: Number.isFinite(config.minimumParallelOverlap) ? config.minimumParallelOverlap : 20
   };
-  const lines = inputLines.map(normalizeSegment).filter(Boolean);
+  const lines = inputLines.map(normalizeSegment).filter(Boolean);\n  const mergedLines = mergeCollinearSegments(inputLines, config);
   const rawPoints = [];
   lines.forEach(line => rawPoints.push(line.start, line.end));
   const rawIntersections = [];
@@ -155,14 +210,14 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     coordinateSpace: 'input-image-pixels',
     summary: {
       inputLineCount: inputLines.length,
-      validLineCount: lines.length,
+      validLineCount: lines.length,\n      mergedCollinearLineCount: mergedLines.length,
       pointCount: points.length,
       junctionCounts: counts,
       properIntersectionCount: rawIntersections.length,
       parallelPairCount: parallelGroups.length,
       lineSourceCounts: sourceCounts
     },
-    lines: lines.map(line => ({
+    mergedLines,\n    lines: lines.map(line => ({
       id: line.id,
       source: line.source,
       confidence: line.confidence,
@@ -182,4 +237,4 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
   };
 }
 
-module.exports = { extractGeometryFeatures };
+module.exports = { extractGeometryFeatures, mergeCollinearSegments };
