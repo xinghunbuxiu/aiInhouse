@@ -1,0 +1,36 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const { extractGeometryFeatures } = require('./geometry-feature-detector');
+
+const lines = [
+  { id: 'horizontal', start: { x: 0, y: 50 }, end: { x: 100, y: 50 } },
+  { id: 'vertical-t', start: { x: 50, y: 50 }, end: { x: 50, y: 100 } },
+  { id: 'parallel', start: { x: 0, y: 62 }, end: { x: 100, y: 62 } }
+];
+const result = extractGeometryFeatures(lines, { snapTolerance: 2, minimumParallelDistance: 3, maximumParallelDistance: 30, minimumParallelOverlap: 40 });
+assert.equal(result.version, 1, 'feature report must be versioned');
+assert.equal(result.summary.validLineCount, 3, 'valid input segments must be preserved');
+assert(result.points.some(point => point.type === 't-junction' && point.incidentLineIds.includes('horizontal') && point.incidentLineIds.includes('vertical-t')),
+  'a horizontal segment intersected by a vertical segment must yield a T-junction feature');
+assert(result.parallelGroups.some(group => group.lineIds.includes('horizontal') && group.lineIds.includes('parallel') && group.distance === 12),
+  'nearby parallel lines with sufficient overlap must be reported as geometric evidence');
+assert(!result.parallelGroups.some(group => group.lineIds.includes('horizontal') && group.lineIds.includes('vertical-t')),
+  'perpendicular lines must not be reported as parallel');
+
+const cross = extractGeometryFeatures([
+  { id: 'h', start: { x: 0, y: 20 }, end: { x: 40, y: 20 } },
+  { id: 'v', start: { x: 20, y: 0 }, end: { x: 20, y: 40 } }
+], { snapTolerance: 1 });
+assert(cross.intersections.some(item => Math.abs(item.point.x - 20) < 0.01 && Math.abs(item.point.y - 20) < 0.01),
+  'crossing segments must expose the intersection coordinate');
+assert(cross.points.some(point => point.type === 'cross-junction' && point.degree === 4),
+  'a full horizontal/vertical crossing must expose four rays');
+
+const invalid = extractGeometryFeatures([
+  { id: 'zero', start: { x: 4, y: 4 }, end: { x: 4, y: 4 } },
+  { id: 'bad', start: { x: null, y: 0 }, end: { x: 10, y: 0 } }
+]);
+assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');
+
+console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
