@@ -101,4 +101,14 @@ assert.equal(preserved.summary.appearanceAvailableLineCount, 1,
 assert.equal(preserved.summary.appearanceSampledFromRasterLineCount, 0,
   'precomputed evidence must not be mislabeled as newly sampled raster evidence');
 
+const mergedAppearance = mergeCollinearSegments([
+  { id: 'appearance-a', source: 'hough-edge', start: { x: 0, y: 0 }, end: { x: 30, y: 0 }, appearance: { meanLuminance: 40, meanBGR: [20, 30, 40] } },
+  { id: 'appearance-b', source: 'hough-edge', start: { x: 32, y: 0 }, end: { x: 60, y: 0 }, appearance: { meanLuminance: 180, meanBGR: [170, 180, 190] } }
+], { mergeGapTolerance: 4 });
+assert.equal(mergedAppearance.length, 1, 'near-collinear same-source segments should merge');
+assert.equal(mergedAppearance[0].sourceAppearances.length, 2,
+  'merged geometry must retain separate appearance samples from every source line');
+assert.deepEqual(mergedAppearance[0].sourceAppearances.map(item => item.appearance.meanLuminance), [40, 180],
+  'appearance differences must not be erased by averaging merged segments');
+
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
