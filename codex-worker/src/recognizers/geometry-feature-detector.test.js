@@ -64,4 +64,16 @@ assert(topology.topology.connectedComponents.some(component => component.lineIds
 assert(topology.topology.isolatedLineIds.includes('furniture-edge-a') && topology.topology.isolatedLineIds.includes('furniture-edge-b'),
   'unconnected object-like strokes must remain independently traceable');
 
+
+const raster = { width: 12, height: 8, channels: 1, data: new Uint8Array(12 * 8).fill(245) };
+for (let y = 3; y <= 4; y += 1) for (let x = 1; x <= 10; x += 1) raster.data[y * 12 + x] = 25;
+const appearance = extractGeometryFeatures([
+  { id: 'dark-wall-candidate', source: 'wall-band', start: { x: 1, y: 3 }, end: { x: 10, y: 3 } }
+], { raster, appearanceSampleRadius: 0, appearanceSampleCount: 7 });
+const lineAppearance = appearance.lines[0].appearance;
+assert(lineAppearance, 'when a raster is provided, line appearance must be sampled');
+assert(lineAppearance.darkPixelRatio > 0.9, 'dark stroke should retain its dark-pixel ratio');
+assert(lineAppearance.centerBackgroundContrast > 100, 'stroke/background contrast should be recorded');
+assert.equal(lineAppearance.interpretation, 'appearance evidence only; not a wall/object label');
+
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
