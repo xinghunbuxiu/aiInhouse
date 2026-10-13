@@ -108,6 +108,9 @@ function mergeCollinearSegments(inputLines = [], config = {}) {
     const ux = line.dx / line.length, uy = line.dy / line.length;
     let target = null;
     for (const group of groups) {
+      // Do not merge geometrically close lines from different detectors: a dimension
+      // line can sit on top of a wall candidate. Provenance mismatch is a hard boundary.
+      if (!config.allowMixedSources && line.source !== group.source) continue;
       const angle = Math.acos(Math.min(1, Math.abs(ux * group.ux + uy * group.uy)));
       if (angle > angleTolerance) continue;
       const perpendicularDistance = Math.abs((line.start.x - group.origin.x) * group.uy - (line.start.y - group.origin.y) * group.ux);
