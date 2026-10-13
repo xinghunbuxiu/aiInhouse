@@ -235,6 +235,66 @@ function normalizeCurves(curves = []) {
     }));
 }
 
+function sampleLineAppearance(line, raster, config = {}) {
+  if (!raster || !Number.isInteger(raster.width) || !Number.isInteger(raster.height) || !raster.data) return null;
+  const width = raster.width, height = raster.height, data = raster.data;
+  const channels = raster.channels || 1;
+  if (!Number.isInteger(channels) || channels < 1 || data.length < width * height * channels) return null;
+  const radius = Number.isFinite(config.appearanceSampleRadius) ? Math.max(0, config.appearanceSampleRadius) : 2;
+  const sampleCount = Number.isFinite(config.appearanceSampleCount) ? Math.max(3, config.appearanceSampleCount) : 21;
+  const values = [];
+  const samplePoints = [];
+  for (let i = 0; i < sampleCount; i += 1) {
+    const t = i / (sampleCount - 1);
+    const x = Math.round(line.start.x + (line.end.x - line.start.x) * t);
+    const y = Math.round(line.start.y + (line.end.y - line.start.y) * t);
+    if (x < 0 || x >= width || y < 0 || y >= height) continue;
+    samplePoints.push({ x, y });
+    for (let oy = -radius; oy <= radius; oy += 1) {
+      for (let ox = -radius; ox <= radius; ox += 1) {
+        const px = x + ox, py = y + oy;
+        if (px < 0 || px >= width || py < 0 || py >= height) continue;
+        const offset = (py * width + px) * channels;
+        const gray = channels >= 3 ? 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2] : data[offset];
+        values.push(gray);
+      }
+    }
+  }
+  if (!values.length) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const percentile = p => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))];
+  const darkThreshold = Number.isFinite(config.darkPixelThreshold) ? config.darkPixelThreshold : 150;
+  const darkRatio = values.filter(value => value < darkThreshold).length / values.length;
+  const centerValues = [];
+  const backgroundValues = [];
+  for (const point of samplePoints) {
+    const offset = (point.y * width + point.x) * channels;
+    centerValues.push(channels >= 3 ? 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2] : data[offset]);
+    const bx = Math.min(width - 1, Math.max(0, Math.round(point.x + (line.end.y - line.start.y) / Math.max(line.length, 1) * 4)));
+    const by = Math.min(height - 1, Math.max(0, Math.round(point.y - (line.end.x - line.start.x) / Math.max(line.length, 1) * 4)));
+    const bo = (by * width + bx) * channels;
+    backgroundValues.push(channels >= 3 ? 0.299 * data[bo] + 0.587 * data[bo + 1] + 0.114 * data[bo + 2] : data[bo]);
+  }
+  const centerMean = centerValues.reduce((sum, value) => sum + value, 0) / centerValues.length;
+  const backgroundMean = backgroundValues.reduce((sum, value) => sum + value, 0) / backgroundValues.length;
+  return {
+    colorSpace: channels >= 3 ? 'rgb-to-luminance' : 'grayscale',
+    sampleCount: values.length,
+    meanLuminance: Number(mean.toFixed(2)),
+    medianLuminance: Number(percentile(0.5).toFixed(2)),
+    luminanceP10: Number(percentile(0.1).toFixed(2)),
+    luminanceP90: Number(percentile(0.9).toFixed(2)),
+    luminanceStdDev: Number(Math.sqrt(variance).toFixed(2)),
+    darkPixelRatio: Number(darkRatio.toFixed(4)),
+    centerLuminance: Number(centerMean.toFixed(2)),
+    nearbyBackgroundLuminance: Number(backgroundMean.toFixed(2)),
+    centerBackgroundContrast: Number(Math.abs(centerMean - backgroundMean).toFixed(2)),
+    interpretation: 'appearance evidence only; not a wall/object label'
+  };
+}
+
 function extractGeometryFeatures(inputLines = [], config = {}) {
   const options = {
     snapTolerance: Number.isFinite(config.snapTolerance) ? config.snapTolerance : 4,
@@ -308,7 +368,8 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       connectedComponentCount: topology.connectedComponents.length,
       isolatedLineCount: topology.isolatedLineIds.length,
       curveCount: curves.length,
-      lineSourceCounts: sourceCounts
+      lineSourceCounts: sourceCounts,
+      appearanceSampledLineCount: lines.filter(line => sampleLineAppearance(line, config.raster, config)).length
     },
     mergedLines,
     topology,
@@ -321,7 +382,8 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       start: line.start,
       end: line.end,
       length: Number(line.length.toFixed(2)),
-      angleDegrees: Number((line.angle * 180 / Math.PI).toFixed(2))
+      angleDegrees: Number((line.angle * 180 / Math.PI).toFixed(2)),
+      appearance: sampleLineAppearance(line, config.raster, config)
     })),
     points,
     intersections: rawIntersections.map((item, index) => ({
@@ -333,4 +395,4 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
   };
 }
 
-module.exports = { extractGeometryFeatures, mergeCollinearSegments };
+module.exports = { extractGeometryFeatures, mergeCollinearSegments, sampleLineAppearance };
