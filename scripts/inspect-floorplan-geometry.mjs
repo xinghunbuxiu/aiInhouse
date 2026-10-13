@@ -32,9 +32,21 @@ function renderOverlay(features, imageData, width, height, mode, symbols = []) {
     'cross-junction': '#b197fc',
     junction: '#ffffff'
   };
-  const lineSvg = features.lines.map(line =>
-    `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${mode === 'structural' ? '#00e676' : lineColor(line)}" stroke-width="2" opacity=".88"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}${line.sourceIds ? ` · source IDs ${escapeXml(line.sourceIds.join(', '))}` : ''}</title></line>`
-  ).join('');
+  const lineSvg = features.lines.map(line => {
+    const appearance = line.appearance || {};
+    const appearanceLabel = [
+      Number.isFinite(appearance.meanLuminance) ? `mean luminance ${appearance.meanLuminance}` : '',
+      Number.isFinite(appearance.luminanceStdDev) ? `luminance variation ${appearance.luminanceStdDev}` : '',
+      Number.isFinite(appearance.darkPixelRatio) ? `dark pixel ratio ${appearance.darkPixelRatio}` : '',
+      Number.isFinite(appearance.centerBackgroundContrast) ? `stroke/background contrast ${appearance.centerBackgroundContrast}` : '',
+      Array.isArray(appearance.meanBGR) ? `mean BGR ${appearance.meanBGR.join(', ')}` : '',
+      Number.isFinite(line.thickness) ? `thickness ${line.thickness}px` : ''
+    ].filter(Boolean).join(' · ');
+    // Visual intensity encodes measured contrast only; it does not classify a wall.
+    const contrast = Number(appearance.centerBackgroundContrast);
+    const opacity = Number.isFinite(contrast) ? Math.max(0.45, Math.min(1, 0.45 + contrast / 255)) : 0.88;
+    return `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${mode === 'structural' ? '#00e676' : lineColor(line)}" stroke-width="2" opacity="${opacity.toFixed(2)}"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}${line.sourceIds ? ` · source IDs ${escapeXml(line.sourceIds.join(', '))}` : ''}${appearanceLabel ? ` · appearance: ${escapeXml(appearanceLabel)}` : ' · appearance evidence unavailable'}</title></line>`;
+  }).join('');
   const gapSvg = (features.topology?.disconnectedEndpointPairs || []).map(pair => {
     const [a, b] = pair.endpoints;
     return `<g><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#ff1744" stroke-width="2" stroke-dasharray="4 3" opacity=".95"><title>Disconnected endpoints · gap ${pair.gap}px · ${escapeXml(pair.lineIds.join(', '))}</title></line><circle cx="${a.x}" cy="${a.y}" r="3" fill="#ff1744"/><circle cx="${b.x}" cy="${b.y}" r="3" fill="#ff1744"/></g>`;
