@@ -46,12 +46,6 @@ jobs:
         with:
           name: sample-floorplan-recognition-report
           path: |
-            tmp/sample-floorplan-eval/summary.json
-            tmp/sample-floorplan-eval/geometry-debug/geometry-feature-summary.json
-            tmp/sample-floorplan-eval/geometry-debug/geometry-feature-overlay.svg
-            tmp/sample-floorplan-eval/geometry-debug/structural-feature-overlay.svg
-            tmp/sample-floorplan-eval/geometry-debug/merged-geometry-overlay.svg
-            tmp/sample-floorplan-eval/geometry-debug/dark-rectangle-candidates-overlay.svg
-            tmp/sample-floorplan-eval/geometry-debug/recognition-preprocess.json
+            tmp/sample-floorplan-eval/**
           if-no-files-found: warn
       - run: npm run build
