@@ -487,15 +487,19 @@ def detect_dark_rectangle_candidates():
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     candidates = []
-    min_area = max(90, int(w * h * 0.00006))
+    # Reject tiny dimension-text/annotation blobs; these are not useful as
+    # standalone rectangle geometry and were the dominant false positives in
+    # the checked-in 1400x976 sample. Keep this independent of wall-band rules.
+    min_dimension = max(14, int(min(w, h) * 0.014))
+    min_area = max(180, int(w * h * 0.00013))
     max_area = int(w * h * 0.12)
     for contour in contours:
         area = float(cv2.contourArea(contour))
         if area < min_area or area > max_area: continue
         x, y, bw, bh = cv2.boundingRect(contour)
-        if bw < 10 or bh < 10: continue
+        if bw < min_dimension or bh < min_dimension: continue
         aspect = float(max(bw, bh)) / max(1, min(bw, bh))
-        if aspect > 8.0: continue
+        if aspect > 6.0: continue
         perimeter = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, max(1.5, perimeter * 0.025), True)
         if len(approx) < 4 or len(approx) > 10: continue
