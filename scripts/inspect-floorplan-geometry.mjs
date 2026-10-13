@@ -33,7 +33,7 @@ function renderOverlay(features, imageData, width, height, mode) {
     junction: '#ffffff'
   };
   const lineSvg = features.lines.map(line =>
-    `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${mode === 'structural' ? '#00e676' : lineColor(line)}" stroke-width="2" opacity=".88"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}</title></line>`
+    `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${mode === 'structural' ? '#00e676' : lineColor(line)}" stroke-width="2" opacity=".88"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}${line.sourceIds ? ` · source IDs ${escapeXml(line.sourceIds.join(', '))}` : ''}</title></line>`
   ).join('');
   const pointSvg = features.points.map(point =>
     `<circle cx="${point.x}" cy="${point.y}" r="${point.type === 'cross-junction' || point.type === 't-junction' ? 5 : 3}" fill="${colors[point.type] || colors.junction}" stroke="#111" stroke-width="1"><title>${escapeXml(point.id)} · ${escapeXml(point.type)} · degree ${point.degree} · ${escapeXml(point.incidentLineIds.join(', '))}</title></circle>`
@@ -59,6 +59,11 @@ const lineCandidates = Array.isArray(geometry.lines) ? geometry.lines : [];
 const allFeatures = extractGeometryFeatures(lineCandidates);
 const structuralCandidates = lineCandidates.filter(line => /wall|structural|morphology/i.test(String(line.source || '')));
 const structuralFeatures = extractGeometryFeatures(structuralCandidates);
+const mergedFeatures = extractGeometryFeatures(allFeatures.mergedLines.map(line => ({
+  ...line,
+  source: line.source,
+  sourceIds: line.sourceIds
+})));
 const imageBuffer = fs.readFileSync(imagePath);
 const imageData = `data:${imageMime(imagePath)};base64,${imageBuffer.toString('base64')}`;
 const dimensions = preprocessing.image || {};
@@ -84,6 +89,11 @@ fs.writeFileSync(summaryPath, JSON.stringify({
     sourceLineCandidateCount: structuralCandidates.length,
     sourceFilter: 'line.source matches wall|structural|morphology',
     ...structuralFeatures
+  },
+  mergedGeometryFeatures: {
+    sourceLineCandidateCount: allFeatures.mergedLines.length,
+    sourceIdsPreserved: true,
+    ...mergedFeatures
   }
 }, null, 2));
 fs.writeFileSync(allOverlayPath, renderOverlay(allFeatures, imageData, width, height, 'all'));
