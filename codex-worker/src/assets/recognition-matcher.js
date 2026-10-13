@@ -123,21 +123,41 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
   }
 
   const thickness = toNumber(line.thickness, 0);
-  const appearance = line.appearance && typeof line.appearance === 'object' ? line.appearance : {};
+  // Merged geometry stores pixel measurements per original segment in
+  // sourceAppearances. Consume those measurements too; otherwise the evidence
+  // survives normalization/merge but silently disappears at semantic matching.
+  const appearances = [];
+  if (line.appearance && typeof line.appearance === 'object') {
+    appearances.push({ lineId: line.id || 'line', appearance: line.appearance });
+  }
+  if (Array.isArray(line.sourceAppearances)) {
+    for (const source of line.sourceAppearances) {
+      if (source?.appearance && typeof source.appearance === 'object') {
+        appearances.push({ lineId: source.lineId || 'source-line', appearance: source.appearance });
+      }
+    }
+  }
   const tone = line.wallEvidence?.tone || line.tone || {};
   // Prefer existing detector tone metrics; use source-pixel measurements when
   // those metrics are absent. Appearance is supporting evidence, never a label.
+  const sourceDarkRatios = appearances.map((item) => toNumber(item.appearance.darkPixelRatio, 0));
+  const sourceP10 = appearances.map((item) => toNumber(item.appearance.luminanceP10, 255));
   const veryDark = Number.isFinite(Number(tone.veryDarkRatio))
     ? toNumber(tone.veryDarkRatio, 0)
-    : (toNumber(appearance.luminanceP10, 255) < 95 ? 0.25 : 0);
+    : (sourceP10.some((value) => value < 95) ? 0.25 : 0);
   const dark = Number.isFinite(Number(tone.darkRatio))
     ? toNumber(tone.darkRatio, 0)
-    : toNumber(appearance.darkPixelRatio, 0);
+    : Math.max(0, ...sourceDarkRatios);
   const appearanceEvidence = [];
-  if (Number.isFinite(Number(appearance.meanLuminance))) appearanceEvidence.push(`mean-luminance:${toNumber(appearance.meanLuminance).toFixed(1)}`);
-  if (Number.isFinite(Number(appearance.centerBackgroundContrast))) appearanceEvidence.push(`stroke-contrast:${toNumber(appearance.centerBackgroundContrast).toFixed(1)}`);
-  if (Number.isFinite(Number(appearance.luminanceStdDev))) appearanceEvidence.push(`luminance-variation:${toNumber(appearance.luminanceStdDev).toFixed(1)}`);
-  if (Array.isArray(appearance.meanBGR)) appearanceEvidence.push(`mean-BGR:${appearance.meanBGR.map((v) => toNumber(v).toFixed(1)).join(',')}`);
+  for (const { lineId, appearance } of appearances) {
+    const prefix = appearances.length > 1 ? `source:${lineId}:` : '';
+    if (Number.isFinite(Number(appearance.meanLuminance))) appearanceEvidence.push(`${prefix}mean-luminance:${toNumber(appearance.meanLuminance).toFixed(1)}`);
+    if (Number.isFinite(Number(appearance.centerBackgroundContrast))) appearanceEvidence.push(`${prefix}stroke-contrast:${toNumber(appearance.centerBackgroundContrast).toFixed(1)}`);
+    if (Number.isFinite(Number(appearance.luminanceStdDev))) appearanceEvidence.push(`${prefix}luminance-variation:${toNumber(appearance.luminanceStdDev).toFixed(1)}`);
+    if (Array.isArray(appearance.meanBGR)) appearanceEvidence.push(`${prefix}mean-BGR:${appearance.meanBGR.map((v) => toNumber(v).toFixed(1)).join(',')}`);
+    if (Number.isFinite(Number(appearance.darkPixelRatio))) appearanceEvidence.push(`${prefix}dark-pixel-ratio:${toNumber(appearance.darkPixelRatio).toFixed(3)}`);
+    if (Number.isFinite(Number(appearance.luminanceP10))) appearanceEvidence.push(`${prefix}luminance-p10:${toNumber(appearance.luminanceP10).toFixed(1)}`);
+  }
   const evidence = (items) => [...items, ...appearanceEvidence];
 
   const dashed = Boolean(line.dashed || line.lineStyle === 'dashed' || /dash|demolish/i.test(String(line.source || '')));
