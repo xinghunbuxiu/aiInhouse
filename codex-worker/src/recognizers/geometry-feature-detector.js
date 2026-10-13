@@ -20,6 +20,13 @@ function normalizeSegment(line, index) {
     source: String(line.source || 'unknown'),
     confidence: finite(line.confidence) ? Number(line.confidence) : null,
     orientation: String(line.orientation || ''),
+    // Keep source appearance attached to its originating geometry primitive.
+    // This is evidence, not a semantic wall/furniture label.
+    appearance: line.appearance && typeof line.appearance === 'object'
+      ? JSON.parse(JSON.stringify(line.appearance)) : null,
+    thickness: finite(line.thickness) ? Number(line.thickness) : null,
+    color: line.color && typeof line.color === 'object'
+      ? JSON.parse(JSON.stringify(line.color)) : null,
     start, end, dx, dy, length,
     angle: Math.atan2(dy, dx)
   };
@@ -369,7 +376,8 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       isolatedLineCount: topology.isolatedLineIds.length,
       curveCount: curves.length,
       lineSourceCounts: sourceCounts,
-      appearanceSampledLineCount: lines.filter(line => sampleLineAppearance(line, config.raster, config)).length
+      appearanceAvailableLineCount: lines.filter(line => line.appearance || sampleLineAppearance(line, config.raster, config)).length,
+      appearanceSampledFromRasterLineCount: lines.filter(line => sampleLineAppearance(line, config.raster, config)).length
     },
     mergedLines,
     topology,
@@ -383,7 +391,11 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       end: line.end,
       length: Number(line.length.toFixed(2)),
       angleDegrees: Number((line.angle * 180 / Math.PI).toFixed(2)),
-      appearance: sampleLineAppearance(line, config.raster, config)
+      thickness: line.thickness,
+      color: line.color,
+      // Prefer measurements from the original image; only sample a supplied raster
+      // when preprocessing did not already attach appearance evidence.
+      appearance: line.appearance || sampleLineAppearance(line, config.raster, config)
     })),
     points,
     intersections: rawIntersections.map((item, index) => ({
