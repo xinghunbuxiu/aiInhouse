@@ -156,16 +156,100 @@ function mergeCollinearSegments(inputLines = [], config = {}) {
   }));
 }
 
+function topologyEvidence(lines, options) {
+  const endpoints = [];
+  for (const line of lines) {
+    endpoints.push({ lineId: line.id, point: line.start }, { lineId: line.id, point: line.end });
+  }
+  const endpointDegree = endpoints.map(endpoint => ({
+    ...endpoint,
+    nearbyEndpointIds: endpoints
+      .filter(other => other.lineId !== endpoint.lineId && distance(endpoint.point, other.point) <= options.endpointSnapTolerance)
+      .map(other => other.lineId)
+  }));
+  const disconnectedEndpoints = [];
+  for (let i = 0; i < endpoints.length; i += 1) {
+    for (let j = i + 1; j < endpoints.length; j += 1) {
+      if (endpoints[i].lineId === endpoints[j].lineId) continue;
+      const gap = distance(endpoints[i].point, endpoints[j].point);
+      if (gap <= options.endpointSnapTolerance || gap > options.maximumEndpointGap) continue;
+      disconnectedEndpoints.push({
+        lineIds: [endpoints[i].lineId, endpoints[j].lineId],
+        endpoints: [endpoints[i].point, endpoints[j].point],
+        gap: Number(gap.toFixed(2)),
+        likelySameBoundary: gap <= options.likelyBoundaryGap
+      });
+    }
+  }
+  const adjacency = new Map(lines.map(line => [line.id, new Set()]));
+  for (let i = 0; i < lines.length; i += 1) {
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const a = lines[i], b = lines[j];
+      const endpointsTouch = [a.start, a.end].some(p => [b.start, b.end].some(q => distance(p, q) <= options.endpointSnapTolerance));
+      if (endpointsTouch || segmentIntersection(a, b) || pointToSegment(a.start, b).distance <= options.endpointSnapTolerance
+        || pointToSegment(a.end, b).distance <= options.endpointSnapTolerance
+        || pointToSegment(b.start, a).distance <= options.endpointSnapTolerance
+        || pointToSegment(b.end, a).distance <= options.endpointSnapTolerance) {
+        adjacency.get(a.id).add(b.id);
+        adjacency.get(b.id).add(a.id);
+      }
+    }
+  }
+  const components = [];
+  const visited = new Set();
+  for (const line of lines) {
+    if (visited.has(line.id)) continue;
+    const stack = [line.id], memberIds = [];
+    visited.add(line.id);
+    while (stack.length) {
+      const id = stack.pop();
+      memberIds.push(id);
+      for (const neighbor of adjacency.get(id) || []) {
+        if (!visited.has(neighbor)) { visited.add(neighbor); stack.push(neighbor); }
+      }
+    }
+    components.push({ id: `line-component-${components.length + 1}`, lineIds: memberIds.sort(), lineCount: memberIds.length });
+  }
+  return {
+    endpointCount: endpoints.length,
+    disconnectedEndpointPairs: disconnectedEndpoints.sort((a, b) => a.gap - b.gap),
+    connectedComponents: components,
+    isolatedLineIds: components.filter(component => component.lineCount === 1).map(component => component.lineIds[0])
+  };
+}
+
+function normalizeCurves(curves = []) {
+  return curves.filter(curve => curve && curve.center
+    && finite(curve.center.x) && finite(curve.center.y)
+    && finite(curve.radius) && Number(curve.radius) > 0
+    && finite(curve.startAngle) && finite(curve.endAngle))
+    .map((curve, index) => ({
+      id: String(curve.id || `curve-${index + 1}`),
+      source: String(curve.source || 'unknown-curve'),
+      kind: 'arc',
+      center: { x: Number(curve.center.x), y: Number(curve.center.y) },
+      radius: Number(curve.radius),
+      startAngle: Number(curve.startAngle),
+      endAngle: Number(curve.endAngle),
+      sweepDegrees: Number((Math.abs(Number(curve.endAngle) - Number(curve.startAngle)) * 180 / Math.PI).toFixed(2))
+    }));
+}
+
 function extractGeometryFeatures(inputLines = [], config = {}) {
   const options = {
     snapTolerance: Number.isFinite(config.snapTolerance) ? config.snapTolerance : 4,
     parallelAngleTolerance: (Number.isFinite(config.parallelAngleToleranceDegrees) ? config.parallelAngleToleranceDegrees : 3) * Math.PI / 180,
     minimumParallelDistance: Number.isFinite(config.minimumParallelDistance) ? config.minimumParallelDistance : 3,
     maximumParallelDistance: Number.isFinite(config.maximumParallelDistance) ? config.maximumParallelDistance : 80,
+    endpointSnapTolerance: Number.isFinite(config.endpointSnapTolerance) ? config.endpointSnapTolerance : 4,
+    maximumEndpointGap: Number.isFinite(config.maximumEndpointGap) ? config.maximumEndpointGap : 48,
+    likelyBoundaryGap: Number.isFinite(config.likelyBoundaryGap) ? config.likelyBoundaryGap : 16,
     minimumParallelOverlap: Number.isFinite(config.minimumParallelOverlap) ? config.minimumParallelOverlap : 20
   };
   const lines = inputLines.map(normalizeSegment).filter(Boolean);
   const mergedLines = mergeCollinearSegments(inputLines, config);
+  const topology = topologyEvidence(lines, options);
+  const curves = normalizeCurves(config.curves || []);
   const rawPoints = [];
   lines.forEach(line => rawPoints.push(line.start, line.end));
   const rawIntersections = [];
@@ -220,9 +304,15 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       junctionCounts: counts,
       properIntersectionCount: rawIntersections.length,
       parallelPairCount: parallelGroups.length,
+      disconnectedEndpointPairCount: topology.disconnectedEndpointPairs.length,
+      connectedComponentCount: topology.connectedComponents.length,
+      isolatedLineCount: topology.isolatedLineIds.length,
+      curveCount: curves.length,
       lineSourceCounts: sourceCounts
     },
     mergedLines,
+    topology,
+    curves,
     lines: lines.map(line => ({
       id: line.id,
       source: line.source,
