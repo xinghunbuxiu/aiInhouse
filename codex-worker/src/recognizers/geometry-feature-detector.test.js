@@ -76,4 +76,29 @@ assert(lineAppearance.darkPixelRatio > 0.9, 'dark stroke should retain its dark-
 assert(lineAppearance.centerBackgroundContrast > 100, 'stroke/background contrast should be recorded');
 assert.equal(lineAppearance.interpretation, 'appearance evidence only; not a wall/object label');
 
+// Preprocessing measurements must survive normalization even when the geometry
+// recognizer is not given the source raster again.
+const precomputedAppearance = {
+  colorSpace: 'gray+luminance+meanBGR',
+  meanLuminance: 92.5,
+  luminanceStdDev: 18.2,
+  darkPixelRatio: 0.81,
+  meanBGR: [70, 82, 91],
+  centerBackgroundContrast: 134,
+  interpretation: 'appearance evidence only; not a wall/object label'
+};
+const preserved = extractGeometryFeatures([
+  { id: 'preprocessed-line', source: 'hough-edge',
+    start: { x: 1, y: 1 }, end: { x: 20, y: 1 },
+    thickness: 3, appearance: precomputedAppearance }
+]);
+assert.deepEqual(preserved.lines[0].appearance, precomputedAppearance,
+  'precomputed luminance and color evidence must survive geometry normalization');
+assert.equal(preserved.lines[0].thickness, 3,
+  'measured line thickness must remain attached to the geometry primitive');
+assert.equal(preserved.summary.appearanceAvailableLineCount, 1,
+  'summary must count retained appearance evidence even without a raster');
+assert.equal(preserved.summary.appearanceSampledFromRasterLineCount, 0,
+  'precomputed evidence must not be mislabeled as newly sampled raster evidence');
+
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
