@@ -1514,7 +1514,10 @@ def detect_furniture_symbol_candidates():
         if any(overlap_1d(candidate["x"], candidate["x"] + candidate["width"], item["x"], item["x"] + item["width"]) * overlap_1d(candidate["y"], candidate["y"] + candidate["height"], item["y"], item["y"] + item["height"]) > min(candidate["area"], item["area"]) * 0.62 for item in deduped):
             continue
         deduped.append(candidate)
-        if len(deduped) >= 36:
+        # Keep a wider proposal pool: furniture is often split into several
+        # contours, and the previous cap of 36 could silently drop useful items
+        # on dense plans before room-context analysis had a chance to rank them.
+        if len(deduped) >= 100:
             break
     for index, candidate in enumerate(deduped):
         candidate["id"] = "furniture-symbol-%d" % (index + 1)
@@ -1733,6 +1736,75 @@ room_interior_candidates, room_interiors_debug = detect_room_interior_candidates
 window_symbol_candidates = detect_window_symbol_candidates()
 door_symbol_candidates = detect_door_symbol_candidates()
 furniture_symbol_candidates, annotation_symbol_candidates = detect_furniture_symbol_candidates()
+
+# Add explicit spatial evidence after raw scanning. This does not claim semantic
+# certainty; it records which room contains each candidate and its nearest
+# neighboring objects so downstream analysis can reason about the full layout.
+def enrich_symbol_spatial_context(candidates, rooms, peers):
+    def center_of(item):
+        return (item["x"] + item["width"] / 2.0, item["y"] + item["height"] / 2.0)
+    for item in candidates:
+        cx, cy = center_of(item)
+        containing = []
+        for room in rooms:
+            rx, ry = room["x"], room["y"]
+            rw, rh = room["width"], room["height"]
+            if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
+                containing.append(room)
+        if containing:
+            # Prefer the smallest containing region to avoid assigning a small
+            # fixture to a large overlapping corridor/whole-plan candidate.
+            room = min(containing, key=lambda value: value["width"] * value["height"])
+            item["spatialContext"] = {
+                "roomCandidateId": room.get("id"),
+                "roomAssignment": "center-contained",
+                "roomConfidence": round(float(room.get("confidence", 0.5)), 3)
+            }
+        else:
+            distances = []
+            for room in rooms:
+                rx, ry = room["x"], room["y"]
+                rw, rh = room["width"], room["height"]
+                dx = max(rx - cx, 0, cx - (rx + rw))
+                dy = max(ry - cy, 0, cy - (ry + rh))
+                distances.append((math.hypot(dx, dy), room))
+            distances.sort(key=lambda pair: pair[0])
+            nearest = distances[0] if distances else None
+            item["spatialContext"] = {
+                "roomCandidateId": nearest[1].get("id") if nearest else None,
+                "roomAssignment": "nearest-room-review" if nearest else "unassigned",
+                "roomDistance": round(nearest[0], 1) if nearest else None,
+                "roomConfidence": round(float(nearest[1].get("confidence", 0.5)) * 0.5, 3) if nearest else 0
+            }
+        nearby = []
+        for other in peers:
+            if other is item:
+                continue
+            ox, oy = center_of(other)
+            distance = math.hypot(cx - ox, cy - oy)
+            scale = max(1.0, math.hypot(item["width"], item["height"]) + math.hypot(other["width"], other["height"]))
+            if distance <= max(72.0, scale * 1.35):
+                nearby.append({
+                    "id": other.get("id"),
+                    "type": other.get("type", "unknown"),
+                    "distance": round(distance, 1),
+                    "relation": "overlap" if (
+                        overlap_1d(item["x"], item["x"] + item["width"], other["x"], other["x"] + other["width"]) > 0
+                        and overlap_1d(item["y"], item["y"] + item["height"], other["y"], other["y"] + other["height"]) > 0
+                    ) else "nearby"
+                })
+        item["spatialContext"]["nearbyObjectCandidates"] = sorted(nearby, key=lambda value: value["distance"])[:8]
+
+enrich_symbol_spatial_context(
+    furniture_symbol_candidates,
+    room_interior_candidates,
+    furniture_symbol_candidates + door_symbol_candidates + window_symbol_candidates
+)
+enrich_symbol_spatial_context(
+    annotation_symbol_candidates,
+    room_interior_candidates,
+    annotation_symbol_candidates + furniture_symbol_candidates
+)
 mep_symbol_candidates, electrical_symbol_candidates = detect_mep_electrical_candidates()
 cv2.imwrite(debug_room_interiors, room_interiors_debug)
 balcony_debug = image.copy()
