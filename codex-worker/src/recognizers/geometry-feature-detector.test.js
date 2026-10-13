@@ -13,6 +13,24 @@ assert.equal(result.version, 1, 'feature report must be versioned');
 assert.equal(result.summary.validLineCount, 3, 'valid input segments must be preserved');
 assert(result.points.some(point => point.type === 't-junction' && point.incidentLineIds.includes('horizontal') && point.incidentLineIds.includes('vertical-t')),
   'a horizontal segment intersected by a vertical segment must yield a T-junction feature');
+// Endpoint gap visualization must not invent a diagonal join between perpendicular lines.
+const falseDiagonalGap = extractGeometryFeatures([
+  { id: 'horizontal-edge', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'vertical-edge', source: 'wall-band', start: { x: 110, y: 10 }, end: { x: 110, y: 100 } }
+], { maximumEndpointGap: 48 });
+assert(!falseDiagonalGap.topology.disconnectedEndpointPairs.some(pair =>
+  pair.lineIds.includes('horizontal-edge') && pair.lineIds.includes('vertical-edge')),
+  'perpendicular endpoints must not be represented as a diagonal gap/connection');
+
+// A real collinear discontinuity should remain visible as a repair candidate.
+const collinearGap = extractGeometryFeatures([
+  { id: 'wall-left', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 40, y: 0 } },
+  { id: 'wall-right', source: 'wall-band', start: { x: 48, y: 1 }, end: { x: 90, y: 1 } }
+], { maximumEndpointGap: 48, endpointAlignmentToleranceDegrees: 22 });
+assert(collinearGap.topology.disconnectedEndpointPairs.some(pair =>
+  pair.lineIds.includes('wall-left') && pair.lineIds.includes('wall-right')),
+  'aligned collinear endpoints should still be reported as a plausible gap');
+
 assert(result.parallelGroups.some(group => group.lineIds.includes('horizontal') && group.lineIds.includes('parallel') && group.distance === 12),
   'nearby parallel lines with sufficient overlap must be reported as geometric evidence');
 assert(!result.parallelGroups.some(group => group.lineIds.includes('horizontal') && group.lineIds.includes('vertical-t')),
