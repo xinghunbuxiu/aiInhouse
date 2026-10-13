@@ -123,36 +123,49 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
   }
 
   const thickness = toNumber(line.thickness, 0);
+  const appearance = line.appearance && typeof line.appearance === 'object' ? line.appearance : {};
   const tone = line.wallEvidence?.tone || line.tone || {};
-  const veryDark = toNumber(tone.veryDarkRatio, 0);
-  const dark = toNumber(tone.darkRatio, 0);
+  // Prefer existing detector tone metrics; use source-pixel measurements when
+  // those metrics are absent. Appearance is supporting evidence, never a label.
+  const veryDark = Number.isFinite(Number(tone.veryDarkRatio))
+    ? toNumber(tone.veryDarkRatio, 0)
+    : (toNumber(appearance.luminanceP10, 255) < 95 ? 0.25 : 0);
+  const dark = Number.isFinite(Number(tone.darkRatio))
+    ? toNumber(tone.darkRatio, 0)
+    : toNumber(appearance.darkPixelRatio, 0);
+  const appearanceEvidence = [];
+  if (Number.isFinite(Number(appearance.meanLuminance))) appearanceEvidence.push(`mean-luminance:${toNumber(appearance.meanLuminance).toFixed(1)}`);
+  if (Number.isFinite(Number(appearance.centerBackgroundContrast))) appearanceEvidence.push(`stroke-contrast:${toNumber(appearance.centerBackgroundContrast).toFixed(1)}`);
+  if (Number.isFinite(Number(appearance.luminanceStdDev))) appearanceEvidence.push(`luminance-variation:${toNumber(appearance.luminanceStdDev).toFixed(1)}`);
+  if (Array.isArray(appearance.meanBGR)) appearanceEvidence.push(`mean-BGR:${appearance.meanBGR.map((v) => toNumber(v).toFixed(1)).join(',')}`);
+  const evidence = (items) => [...items, ...appearanceEvidence];
 
   const dashed = Boolean(line.dashed || line.lineStyle === 'dashed' || /dash|demolish/i.test(String(line.source || '')));
   if (dashed) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-demolished'), 0.7, ['dashed-wall-candidate']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-demolished'), 0.7, evidence(['dashed-wall-candidate']));
   }
 
   if (thickness >= 16 && veryDark >= 0.5) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-shear'), 0.8 + Math.min(0.08, thickness / 50), ['very-thick-shear-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-shear'), 0.8 + Math.min(0.08, thickness / 50), evidence(['very-thick-shear-band']));
   }
   if (thickness >= 14 && veryDark >= 0.45) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-load-bearing'), 0.78 + Math.min(0.1, thickness / 40), ['thick-very-dark-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-load-bearing'), 0.78 + Math.min(0.1, thickness / 40), evidence(['thick-very-dark-band']));
   }
   if (thickness >= 10 && dark >= 0.5) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-exterior'), 0.72, ['thick-dark-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-exterior'), 0.72, evidence(['thick-dark-band']));
   }
   if (thickness <= 5 && dark < 0.35) {
-    return buildAssetMatch(findSymbolById(catalog, 'railing-balcony'), 0.62, ['thin-light-rail-candidate']);
+    return buildAssetMatch(findSymbolById(catalog, 'railing-balcony'), 0.62, evidence(['thin-light-rail-candidate']));
   }
   if (thickness >= 7 && thickness < 10) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-interior'), 0.68, ['medium-wall-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-interior'), 0.68, evidence(['medium-wall-band']));
   }
   if (thickness > 0 && thickness < 9) {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-partition'), 0.64, ['thin-wall-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-partition'), 0.64, evidence(['thin-wall-band']));
   }
 
   if (line.source === 'morphology-wall-band' || line.wallSeed === 'structural') {
-    return buildAssetMatch(findSymbolById(catalog, 'wall-interior'), 0.66, ['morphology-wall-band']);
+    return buildAssetMatch(findSymbolById(catalog, 'wall-interior'), 0.66, evidence(['morphology-wall-band']));
   }
 
   return null;
