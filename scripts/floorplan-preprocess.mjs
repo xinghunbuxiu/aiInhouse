@@ -481,6 +481,56 @@ def classify_wall_candidate(line, candidates):
         "reasons": reasons
     }
 
+def detect_dark_rectangle_candidates():
+    # Independent shape proposal pass: do not require a long wall-band response.
+    mask = cv2.threshold(gray, 92, 255, cv2.THRESH_BINARY_INV)[1]
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    candidates = []
+    min_area = max(90, int(w * h * 0.00006))
+    max_area = int(w * h * 0.12)
+    for contour in contours:
+        area = float(cv2.contourArea(contour))
+        if area < min_area or area > max_area: continue
+        x, y, bw, bh = cv2.boundingRect(contour)
+        if bw < 10 or bh < 10: continue
+        aspect = float(max(bw, bh)) / max(1, min(bw, bh))
+        if aspect > 8.0: continue
+        perimeter = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, max(1.5, perimeter * 0.025), True)
+        if len(approx) < 4 or len(approx) > 10: continue
+        rectangularity = area / max(1.0, float(bw * bh))
+        if rectangularity < 0.48: continue
+        roi = gray[y:y+bh, x:x+bw]
+        if roi.size == 0: continue
+        dark_ratio = float(cv2.countNonZero(cv2.threshold(roi, 92, 255, cv2.THRESH_BINARY_INV)[1])) / float(roi.size)
+        if dark_ratio < 0.45: continue
+        candidates.append({
+            "id": "dark-rectangle-%d" % (len(candidates) + 1),
+            "x": int(x), "y": int(y), "width": int(bw), "height": int(bh),
+            "area": round(area, 2), "aspectRatio": round(aspect, 3),
+            "rectangularity": round(rectangularity, 3), "darkPixelRatio": round(dark_ratio, 3),
+            "polygon": [{"x": int(p[0][0]), "y": int(p[0][1])} for p in approx],
+            "confidence": round(min(0.9, 0.45 + rectangularity * 0.25 + dark_ratio * 0.2), 3),
+            "source": "dark-rectangle-contour", "semanticStatus": "unclassified"
+        })
+    # Suppress nested near-identical contours without discarding distinct symbols.
+    candidates.sort(key=lambda item: (item["rectangularity"], item["area"]), reverse=True)
+    kept = []
+    for item in candidates:
+        cx, cy = item["x"] + item["width"]/2, item["y"] + item["height"]/2
+        duplicate = False
+        for prior in kept:
+            px, py = prior["x"] + prior["width"]/2, prior["y"] + prior["height"]/2
+            if (abs(cx-px) < min(item["width"], prior["width"])*0.35 and
+                abs(cy-py) < min(item["height"], prior["height"])*0.35 and
+                abs(item["width"]-prior["width"]) < max(item["width"], prior["width"])*0.25 and
+                abs(item["height"]-prior["height"]) < max(item["height"], prior["height"])*0.25):
+                duplicate = True
+                break
+        if not duplicate: kept.append(item)
+    return kept
+
 def structural_wall_vectors(mask):
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     vectors = []
@@ -1658,6 +1708,7 @@ debug_binary = output_dir + "/vision-binary.png"
 debug_walls = output_dir + "/vision-wall-bands.png"
 debug_structural_wall_mask = output_dir + "/vision-structural-wall-mask.png"
 debug_structural_wall_vectors = output_dir + "/structural-wall-vectors.svg"
+debug_dark_rectangles = output_dir + "/dark-rectangle-candidates.svg"
 debug_balcony_candidates = output_dir + "/vision-balcony-candidates.png"
 debug_room_interiors = output_dir + "/vision-room-interiors.png"
 debug_window_candidates = output_dir + "/vision-window-candidates.png"
@@ -1672,6 +1723,7 @@ cv2.imwrite(debug_walls, wall_debug)
 structural_wall_mask = cv2.dilate(structural_wall_seed, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
 cv2.imwrite(debug_structural_wall_mask, structural_wall_mask)
 wall_vectors = structural_wall_vectors(structural_wall_mask)
+dark_rectangle_candidates = detect_dark_rectangle_candidates()
 balcony_candidates, balcony_outline = detect_balcony_candidates()
 room_interior_candidates, room_interiors_debug = detect_room_interior_candidates()
 window_symbol_candidates = detect_window_symbol_candidates()
@@ -1742,6 +1794,14 @@ for candidate in electrical_symbol_candidates:
     cv2.putText(symbol_debug, "elec:%s %.2f" % (candidate["type"], candidate["confidence"]), (candidate["x"], max(24, candidate["y"] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 2, cv2.LINE_AA)
 cv2.imwrite(debug_symbol_candidates, symbol_debug)
 
+rectangle_svg_paths = []
+for item in dark_rectangle_candidates:
+    x, y, bw, bh = item["x"], item["y"], item["width"], item["height"]
+    rectangle_svg_paths.append('<rect x="%d" y="%d" width="%d" height="%d" fill="none" stroke="#f59e0b" stroke-width="3"/><text x="%d" y="%d" font-size="14" fill="#f59e0b">%s</text>' % (x, y, bw, bh, x, max(14, y-3), item["id"]))
+rectangle_svg = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg"><image href="./recognition-input.jpg" x="0" y="0" width="%d" height="%d"/>%s</svg>''' % (w, h, w, h, w, h, "\\n".join(rectangle_svg_paths))
+open(debug_dark_rectangles, "w", encoding="utf-8").write(rectangle_svg)
+
 vector_svg_paths = []
 for wall in wall_vectors:
     points = wall["polygon"]
@@ -1768,6 +1828,8 @@ print(json.dumps({
         "rejectedWallBandCount": len(rejected_axis_candidates),
         "structuralWallVectorCount": len(wall_vectors),
         "structuralWallVectors": wall_vectors,
+        "darkRectangleCandidateCount": len(dark_rectangle_candidates),
+        "darkRectangleCandidates": dark_rectangle_candidates,
         "balconyCandidateCount": len(balcony_candidates),
         "balconyCandidates": balcony_candidates,
         "roomInteriorCandidateCount": len(room_interior_candidates),
@@ -1786,7 +1848,7 @@ print(json.dumps({
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
     "ocrCandidates": [],
-    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
+    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
 
