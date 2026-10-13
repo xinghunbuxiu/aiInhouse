@@ -131,6 +131,7 @@ function mergeCollinearSegments(inputLines = [], config = {}) {
       group.start = Math.min(group.start, ...projections);
       group.end = Math.max(group.end, ...projections);
       group.sourceIds.push(line.id);
+      if (line.appearance) group.sourceAppearances.push({ lineId: line.id, appearance: line.appearance });
       if (line.source !== group.source) group.source = 'mixed';
       break;
     }
@@ -143,7 +144,9 @@ function mergeCollinearSegments(inputLines = [], config = {}) {
       groups.push({
         ux: uxCanonical, uy: uyCanonical, origin,
         start: Math.min(...projections), end: Math.max(...projections),
-        sourceIds: [line.id], source: line.source
+        sourceIds: [line.id],
+        sourceAppearances: line.appearance ? [{ lineId: line.id, appearance: line.appearance }] : [],
+        source: line.source
       });
     }
   }
@@ -151,6 +154,9 @@ function mergeCollinearSegments(inputLines = [], config = {}) {
     id: `merged-line-${index + 1}`,
     source: group.source,
     sourceIds: group.sourceIds.slice().sort(),
+    // Keep per-source measurements rather than averaging away light/dark/color
+    // differences that may indicate overlapping annotations or distinct strokes.
+    sourceAppearances: group.sourceAppearances.slice().sort((a, b) => a.lineId.localeCompare(b.lineId)),
     start: {
       x: Number((group.origin.x + group.ux * group.start).toFixed(2)),
       y: Number((group.origin.y + group.uy * group.start).toFixed(2))
