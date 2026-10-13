@@ -218,6 +218,50 @@ if lines is not None:
         if length < 20:
             continue
         orientation = "horizontal" if abs(angle) < 12 or abs(abs(angle) - 180) < 12 else ("vertical" if abs(abs(angle) - 90) < 12 else "diagonal")
+        # Sample original pixels along the candidate stroke. Keep appearance as evidence,
+        # not as a semantic label: dark lines can still be annotations or furniture.
+        luminance_samples = []
+        color_samples = []
+        background_samples = []
+        for sample_index in range(21):
+            t = sample_index / 20.0
+            sx = int(round(x1 + (x2 - x1) * t))
+            sy = int(round(y1 + (y2 - y1) * t))
+            if not (0 <= sx < w and 0 <= sy < h):
+                continue
+            y0, y1b = max(0, sy - 2), min(h, sy + 3)
+            x0, x1b = max(0, sx - 2), min(w, sx + 3)
+            luminance_samples.extend(gray[y0:y1b, x0:x1b].reshape(-1).astype(float).tolist())
+            color_samples.append(image[sy, sx].astype(float))
+            nx = int(round(sx + (y2 - y1) / max(length, 1) * 4))
+            ny = int(round(sy - (x2 - x1) / max(length, 1) * 4))
+            nx, ny = min(w - 1, max(0, nx)), min(h - 1, max(0, ny))
+            background_samples.append(float(gray[ny, nx]))
+        if luminance_samples:
+            sorted_luma = sorted(luminance_samples)
+            center_luma = float(np.mean([gray[int(round(y1 + (y2-y1)*k/20)), int(round(x1 + (x2-x1)*k/20))] for k in range(21)]))
+            mean_luma = float(np.mean(luminance_samples))
+            std_luma = float(np.std(luminance_samples))
+            dark_ratio = float(np.mean(np.asarray(luminance_samples) < 150))
+            bg_luma = float(np.mean(background_samples)) if background_samples else 255.0
+            bgr = np.mean(np.asarray(color_samples), axis=0).tolist() if color_samples else [0, 0, 0]
+            appearance = {
+                "colorSpace": "gray+luminance+meanBGR",
+                "meanLuminance": round(mean_luma, 2),
+                "medianLuminance": round(float(np.median(luminance_samples)), 2),
+                "luminanceP10": round(float(np.percentile(luminance_samples, 10)), 2),
+                "luminanceP90": round(float(np.percentile(luminance_samples, 90)), 2),
+                "luminanceStdDev": round(std_luma, 2),
+                "darkPixelRatio": round(dark_ratio, 4),
+                "centerLuminance": round(center_luma, 2),
+                "nearbyBackgroundLuminance": round(bg_luma, 2),
+                "centerBackgroundContrast": round(abs(center_luma - bg_luma), 2),
+                "meanBGR": [round(float(v), 2) for v in bgr],
+                "sampleCount": len(luminance_samples),
+                "interpretation": "appearance evidence only; not a wall/object label"
+            }
+        else:
+            appearance = None
         line_items.append({
             "id": "line-%d" % (i + 1),
             "start": {"x": x1, "y": y1},
@@ -226,7 +270,8 @@ if lines is not None:
             "angle": round(angle, 2),
             "orientation": orientation,
             "source": "hough-edge",
-            "confidence": round(0.58 + min(0.22, length / max(w, h) * 0.35), 3)
+            "confidence": round(0.58 + min(0.22, length / max(w, h) * 0.35), 3),
+            "appearance": appearance
         })
 
 def extract_axis_candidates(mask, orientation):
