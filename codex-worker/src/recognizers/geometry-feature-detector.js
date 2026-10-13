@@ -358,6 +358,32 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       if (evidence) parallelGroups.push({ id: `parallel-pair-${parallelGroups.length + 1}`, ...evidence });
     }
   }
+  // Join geometric context with measured appearance as a traceable evidence profile.
+  // This deliberately does not emit wall/furniture labels: semantic classification
+  // needs calibrated training/evaluation data, not a hand-written darkness threshold.
+  const lineEvidence = lines.map(line => {
+    const junctions = points.filter(point => point.incidentLineIds.includes(line.id));
+    const parallelRelations = parallelGroups.filter(group => group.lineIds.includes(line.id));
+    const appearance = line.appearance || sampleLineAppearance(line, config.raster, config);
+    const disconnectedRelations = topology.disconnectedEndpointPairs.filter(pair => pair.lineIds.includes(line.id));
+    return {
+      lineId: line.id,
+      appearanceAvailable: Boolean(appearance),
+      appearance,
+      geometry: {
+        orientation: line.orientation,
+        length: Number(line.length.toFixed(2)),
+        junctionCount: junctions.length,
+        tJunctionCount: junctions.filter(point => point.type === 't-junction').length,
+        crossJunctionCount: junctions.filter(point => point.type === 'cross-junction').length,
+        parallelRelationCount: parallelRelations.length,
+        disconnectedEndpointRelationCount: disconnectedRelations.length,
+        connectedComponentId: topology.connectedComponents.find(component => component.lineIds.includes(line.id))?.id || null,
+        isolated: topology.isolatedLineIds.includes(line.id)
+      },
+      interpretation: 'combined geometric and appearance evidence; semantic class not inferred'
+    };
+  });
   const sourceCounts = lines.reduce((result, line) => {
     result[line.source] = (result[line.source] || 0) + 1;
     return result;
@@ -388,6 +414,7 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     mergedLines,
     topology,
     curves,
+    lineEvidence,
     lines: lines.map(line => ({
       id: line.id,
       source: line.source,
