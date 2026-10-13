@@ -30,11 +30,14 @@ assert(cross.points.some(point => point.type === 'cross-junction' && point.degre
 const merged = mergeCollinearSegments([
   { id: 'wall-a', source: 'wall-band', start: { x: 0, y: 10 }, end: { x: 40, y: 10 } },
   { id: 'wall-b', source: 'wall-band', start: { x: 43, y: 11 }, end: { x: 80, y: 10 } },
+  { id: 'annotation-close', source: 'dimension-line', start: { x: 5, y: 11 }, end: { x: 75, y: 11 } },
   { id: 'annotation', source: 'dimension-line', start: { x: 0, y: 24 }, end: { x: 80, y: 24 } }
 ], { mergeDistanceTolerance: 3, mergeGapTolerance: 5 });
-assert.equal(merged.length, 2, 'near-collinear segments should merge, while a distant parallel annotation remains separate');
+assert.equal(merged.length, 3, 'same-source wall segments should merge, while nearby cross-source and distant annotations remain separate');
 assert.deepEqual(merged.find(line => line.sourceIds.includes('wall-a')).sourceIds, ['wall-a', 'wall-b'],
   'merged geometry must retain traceable source segment IDs');
+assert(!merged.find(line => line.sourceIds.includes('wall-a')).sourceIds.includes('annotation-close'),
+  'a nearby dimension line must not merge into a wall line when source provenance differs');
 assert(merged.find(line => line.sourceIds.includes('wall-a')).length >= 79,
   'merged geometry should span the combined supported wall segments');
 
