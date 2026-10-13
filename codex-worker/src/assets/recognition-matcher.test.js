@@ -116,4 +116,24 @@ assert(!matchWallLineCandidate({
 }, catalog),
   'dark appearance alone must not create a wall or object classification');
 
+// Merged-line evidence must reach semantic matching without losing provenance.
+const mergedAppearanceMatch = matchWallLineCandidate({
+  id: 'merged-appearance-wall-candidate',
+  source: 'morphology-wall-band',
+  thickness: 11,
+  sourceAppearances: [
+    { lineId: 'original-a', appearance: { meanLuminance: 80, luminanceP10: 55, darkPixelRatio: 0.2, centerBackgroundContrast: 90 } },
+    { lineId: 'original-b', appearance: { meanLuminance: 68, luminanceP10: 42, darkPixelRatio: 0.68, centerBackgroundContrast: 118, meanBGR: [40, 50, 60] } }
+  ]
+}, catalog);
+assert(mergedAppearanceMatch, 'merged structural candidates should still be matched');
+assert(mergedAppearanceMatch.evidence.includes('thick-dark-band'),
+  'dark ratio from a source segment should support a merged wall candidate');
+assert(mergedAppearanceMatch.evidence.includes('source:original-a:mean-luminance:80.0'),
+  'merged match should preserve first source appearance and provenance');
+assert(mergedAppearanceMatch.evidence.includes('source:original-b:mean-luminance:68.0'),
+  'merged match should preserve second source appearance and provenance');
+assert(mergedAppearanceMatch.evidence.includes('source:original-b:dark-pixel-ratio:0.680'),
+  'merged match should retain per-source dark-pixel measurements');
+
 console.log(`Recognition asset prompt tests passed: ${catalog.symbols.length} catalog symbols; ${context.symbolSamples.length} prompt samples across ${represented.size} categories.`);
