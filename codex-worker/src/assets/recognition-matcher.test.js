@@ -1,7 +1,8 @@
 const assert = require('assert');
 const {
   buildRecognitionPromptAssetContext,
-  loadRecognitionAssetCatalog
+  loadRecognitionAssetCatalog,
+  matchWallLineCandidate
 } = require('../assets/recognition-matcher');
 
 const catalog = loadRecognitionAssetCatalog();
@@ -83,5 +84,36 @@ for (const symbol of catalog.symbols) {
 }
 assert(catalog.parsePipeline.every((categoryId) => categoryIds.includes(categoryId)),
   'parsePipeline must not contain unknown categories');
+
+
+// Original-pixel appearance must flow into candidate matching as supporting
+// evidence, without allowing color alone to label a line as a wall.
+const appearanceMatch = matchWallLineCandidate({
+  id: 'appearance-wall-candidate',
+  source: 'morphology-wall-band',
+  thickness: 11,
+  appearance: {
+    meanLuminance: 72.4,
+    luminanceP10: 48,
+    luminanceStdDev: 21.2,
+    darkPixelRatio: 0.72,
+    centerBackgroundContrast: 126,
+    meanBGR: [52, 63, 71]
+  }
+}, catalog);
+assert(appearanceMatch, 'structural wall-band candidates should still be matched');
+assert(appearanceMatch.evidence.includes('thick-dark-band'),
+  'appearance dark ratio should support wall-candidate matching when legacy tone is absent');
+assert(appearanceMatch.evidence.includes('mean-luminance:72.4'),
+  'asset match must retain measured luminance as traceable evidence');
+assert(appearanceMatch.evidence.includes('stroke-contrast:126.0'),
+  'asset match must retain stroke/background contrast');
+assert(appearanceMatch.evidence.includes('mean-BGR:52.0,63.0,71.0'),
+  'asset match must retain sampled color evidence');
+assert(!matchWallLineCandidate({
+  id: 'color-only-line', source: 'hough-edge',
+  appearance: { meanLuminance: 12, darkPixelRatio: 1, centerBackgroundContrast: 220 }
+}, catalog),
+  'dark appearance alone must not create a wall or object classification');
 
 console.log(`Recognition asset prompt tests passed: ${catalog.symbols.length} catalog symbols; ${context.symbolSamples.length} prompt samples across ${represented.size} categories.`);
