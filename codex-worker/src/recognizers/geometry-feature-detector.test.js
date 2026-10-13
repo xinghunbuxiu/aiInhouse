@@ -48,4 +48,20 @@ const invalid = extractGeometryFeatures([
 assert.equal(invalid.summary.validLineCount, 0, 'invalid and zero-length segments must not become geometry facts');
 assert.equal(invalid.mergedLines.length, 0, 'invalid and zero-length segments must not create merged geometry');
 
+
+const topology = extractGeometryFeatures([
+  { id: 'room-top', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'room-left', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 0, y: 80 } },
+  { id: 'furniture-edge-a', source: 'symbol-edge', start: { x: 150, y: 10 }, end: { x: 180, y: 10 } },
+  { id: 'furniture-edge-b', source: 'symbol-edge', start: { x: 184, y: 10 }, end: { x: 200, y: 10 } }
+], { endpointSnapTolerance: 2, maximumEndpointGap: 20, likelyBoundaryGap: 8,
+  curves: [{ id: 'door-swing', source: 'door-symbol', center: { x: 0, y: 0 }, radius: 30, startAngle: 0, endAngle: Math.PI / 2 }] });
+assert.equal(topology.curves.length, 1, 'explicit arc evidence must be preserved instead of flattened into straight lines');
+assert(topology.topology.disconnectedEndpointPairs.some(pair => pair.lineIds.includes('furniture-edge-a') && pair.lineIds.includes('furniture-edge-b') && pair.gap === 4),
+  'a small gap between endpoints must be represented as a separate/disconnected relation, not silently joined');
+assert(topology.topology.connectedComponents.some(component => component.lineIds.includes('room-top') && component.lineIds.includes('room-left')),
+  'lines sharing an endpoint must be grouped into the same connected component');
+assert(topology.topology.isolatedLineIds.includes('furniture-edge-a') && topology.topology.isolatedLineIds.includes('furniture-edge-b'),
+  'unconnected object-like strokes must remain independently traceable');
+
 console.log('Geometry feature detector tests passed:', JSON.stringify(result.summary));
