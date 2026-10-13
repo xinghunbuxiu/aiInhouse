@@ -86,6 +86,7 @@ if (!fs.existsSync(imagePath)) throw new Error(`Input image not found: ${imagePa
 if (!fs.existsSync(preprocessPath)) throw new Error(`Preprocess report not found: ${preprocessPath}`);
 const preprocessing = JSON.parse(fs.readFileSync(preprocessPath, 'utf8'));
 const geometry = preprocessing.geometryCandidates || {};
+const darkRectangleCandidates = Array.isArray(geometry.darkRectangleCandidates) ? geometry.darkRectangleCandidates : [];
 const lineCandidates = Array.isArray(geometry.lines) ? geometry.lines : [];
 const allFeatures = extractGeometryFeatures(lineCandidates);
 const structuralCandidates = lineCandidates.filter(line => /wall|structural|morphology/i.test(String(line.source || '')));
@@ -114,7 +115,8 @@ fs.writeFileSync(summaryPath, JSON.stringify({
   interpretationWarning: 'Feature counts are raw geometry evidence, not wall/symbol accuracy. The all-lines view includes Hough edges and annotation-like candidates; the structural view is restricted to source-tagged wall/structural/morphology lines.',
   sourceImageMetrics: dimensions,
   sourcePreprocessingQuality: preprocessing.quality || null,
-  detectedObjectCandidates: { furniture: furnitureSymbols.length, doors: (geometry.doorSymbolCandidates || []).length, windows: (geometry.windowSymbolCandidates || []).length },
+  detectedObjectCandidates: { furniture: furnitureSymbols.length, doors: (geometry.doorSymbolCandidates || []).length, windows: (geometry.windowSymbolCandidates || []).length, darkRectangles: darkRectangleCandidates.length },
+  darkRectangleCandidates: darkRectangleCandidates.map(candidate => ({ id: candidate.id, x: candidate.x, y: candidate.y, width: candidate.width, height: candidate.height, area: candidate.area, aspectRatio: candidate.aspectRatio, rectangularity: candidate.rectangularity, darkPixelRatio: candidate.darkPixelRatio, confidence: candidate.confidence, semanticStatus: candidate.semanticStatus, source: candidate.source })),
   allLineFeatures: {
     sourceLineCandidateCount: lineCandidates.length,
     ...allFeatures
@@ -133,11 +135,23 @@ fs.writeFileSync(summaryPath, JSON.stringify({
 fs.writeFileSync(allOverlayPath, renderOverlay(allFeatures, imageData, width, height, 'all', objectSymbols));
 fs.writeFileSync(structuralOverlayPath, renderOverlay(structuralFeatures, imageData, width, height, 'structural', objectSymbols));
 fs.writeFileSync(mergedOverlayPath, renderOverlay(mergedFeatures, imageData, width, height, 'structural', objectSymbols));
+const darkRectangleOverlayPath = path.join(outputDir, 'dark-rectangle-candidates-overlay.svg');
+const darkRectangleSvg = darkRectangleCandidates.map(candidate => {
+  const x = Number(candidate.x), y = Number(candidate.y), w = Number(candidate.width), h = Number(candidate.height);
+  if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return '';
+  const label = `${candidate.id || 'dark-rectangle'} ${Math.round(Number(candidate.confidence || 0) * 100)}%`;
+  const polygon = Array.isArray(candidate.polygon) ? candidate.polygon.map(point => `${Number(point.x)},${Number(point.y)}`).join(' ') : '';
+  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ff1744" fill-opacity=".10" stroke="#ff1744" stroke-width="2.5"><title>${escapeXml(label)} · area ${candidate.area} · rectangularity ${candidate.rectangularity} · dark ratio ${candidate.darkPixelRatio} · semantic ${escapeXml(candidate.semanticStatus || 'unclassified')}</title></rect>${polygon ? `<polygon points="${polygon}" fill="none" stroke="#ff9100" stroke-width="1.5"/>` : ''}<text x="${x}" y="${Math.max(14,y-3)}" font-size="12" fill="#ff1744" stroke="#fff" stroke-width=".8" paint-order="stroke">${escapeXml(label)}</text></g>`;
+}).join('');
+fs.writeFileSync(darkRectangleOverlayPath, `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><image x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" href="${imageData}"/>${darkRectangleSvg}</svg>`);
 console.log(JSON.stringify({
   image: path.basename(imagePath),
   summaryPath,
   allOverlayPath,
   structuralOverlayPath,
+  darkRectangleOverlayPath,
+  darkRectangleCandidateCount: darkRectangleCandidates.length,
+  darkRectangleCandidates: darkRectangleCandidates.map(({ id, x, y, width, height, confidence, rectangularity, darkPixelRatio, semanticStatus }) => ({ id, x, y, width, height, confidence, rectangularity, darkPixelRatio, semanticStatus })),
   allLines: allFeatures.summary,
   structuralLines: structuralFeatures.summary
 }, null, 2));
