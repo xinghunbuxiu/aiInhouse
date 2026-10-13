@@ -101,6 +101,13 @@ assert.equal(preserved.summary.appearanceAvailableLineCount, 1,
 assert.equal(preserved.summary.appearanceSampledFromRasterLineCount, 0,
   'precomputed evidence must not be mislabeled as newly sampled raster evidence');
 
+assert.equal(preserved.lineEvidence[0].appearanceAvailable, true,
+  'combined evidence profile must consume retained appearance');
+assert.equal(preserved.lineEvidence[0].geometry.orientation, '',
+  'evidence profile must preserve geometry attributes without inventing orientation');
+assert.match(preserved.lineEvidence[0].interpretation, /semantic class not inferred/,
+  'combined evidence must not pretend that geometry and appearance alone prove a semantic class');
+
 const mergedAppearance = mergeCollinearSegments([
   { id: 'appearance-a', source: 'hough-edge', start: { x: 0, y: 0 }, end: { x: 30, y: 0 }, appearance: { meanLuminance: 40, meanBGR: [20, 30, 40] } },
   { id: 'appearance-b', source: 'hough-edge', start: { x: 32, y: 0 }, end: { x: 60, y: 0 }, appearance: { meanLuminance: 180, meanBGR: [170, 180, 190] } }
