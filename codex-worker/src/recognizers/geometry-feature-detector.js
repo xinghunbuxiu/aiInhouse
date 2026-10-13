@@ -181,15 +181,34 @@ function topologyEvidence(lines, options) {
       .map(other => other.lineId)
   }));
   const disconnectedEndpoints = [];
+  const lineById = new Map(lines.map(line => [line.id, line]));
+  const alignmentTolerance = (Number.isFinite(options.endpointAlignmentToleranceDegrees)
+    ? options.endpointAlignmentToleranceDegrees : 22) * Math.PI / 180;
+  const minimumAlignment = Math.cos(alignmentTolerance);
   for (let i = 0; i < endpoints.length; i += 1) {
     for (let j = i + 1; j < endpoints.length; j += 1) {
       if (endpoints[i].lineId === endpoints[j].lineId) continue;
-      const gap = distance(endpoints[i].point, endpoints[j].point);
-      if (gap <= options.endpointSnapTolerance || gap > options.maximumEndpointGap) continue;
+      const a = lineById.get(endpoints[i].lineId), b = lineById.get(endpoints[j].lineId);
+      const gapX = endpoints[j].point.x - endpoints[i].point.x;
+      const gapY = endpoints[j].point.y - endpoints[i].point.y;
+      const gap = Math.hypot(gapX, gapY);
+      if (gap <= options.endpointSnapTolerance || gap > options.maximumEndpointGap || gap === 0) continue;
+
+      // A gap is only a plausible continuation when the gap vector follows
+      // both segment axes. Without this gate, nearby perpendicular endpoints
+      // across a filled room/object are drawn as a false diagonal connection.
+      const alignmentA = Math.abs((gapX * a.dx + gapY * a.dy) / (gap * a.length));
+      const alignmentB = Math.abs((gapX * b.dx + gapY * b.dy) / (gap * b.length));
+      if (alignmentA < minimumAlignment || alignmentB < minimumAlignment) continue;
+
+      // Different detector sources can describe unrelated overlapping features.
+      // Keep source provenance strict unless explicitly opted into mixed sources.
+      if (!options.allowMixedEndpointSources && a.source !== b.source) continue;
       disconnectedEndpoints.push({
-        lineIds: [endpoints[i].lineId, endpoints[j].lineId],
+        lineIds: [a.id, b.id],
         endpoints: [endpoints[i].point, endpoints[j].point],
         gap: Number(gap.toFixed(2)),
+        alignmentDegrees: Number((Math.max(Math.acos(Math.min(1, alignmentA)), Math.acos(Math.min(1, alignmentB))) * 180 / Math.PI).toFixed(2)),
         likelySameBoundary: gap <= options.likelyBoundaryGap
       });
     }
