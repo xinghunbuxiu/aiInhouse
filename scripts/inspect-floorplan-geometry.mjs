@@ -35,17 +35,27 @@ function renderOverlay(features, imageData, width, height, mode) {
   const lineSvg = features.lines.map(line =>
     `<line x1="${line.start.x}" y1="${line.start.y}" x2="${line.end.x}" y2="${line.end.y}" stroke="${mode === 'structural' ? '#00e676' : lineColor(line)}" stroke-width="2" opacity=".88"><title>${escapeXml(line.id)} · ${escapeXml(line.source)} · ${line.length}px · confidence ${line.confidence ?? 'N/A'}${line.sourceIds ? ` · source IDs ${escapeXml(line.sourceIds.join(', '))}` : ''}</title></line>`
   ).join('');
+  const gapSvg = (features.topology?.disconnectedEndpointPairs || []).map(pair => {
+    const [a, b] = pair.endpoints;
+    return `<g><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#ff1744" stroke-width="2" stroke-dasharray="4 3" opacity=".95"><title>Disconnected endpoints · gap ${pair.gap}px · ${escapeXml(pair.lineIds.join(', '))}</title></line><circle cx="${a.x}" cy="${a.y}" r="3" fill="#ff1744"/><circle cx="${b.x}" cy="${b.y}" r="3" fill="#ff1744"/></g>`;
+  }).join('');
+  const curveSvg = (features.curves || []).map(curve => {
+    const start = { x: curve.center.x + curve.radius * Math.cos(curve.startAngle), y: curve.center.y + curve.radius * Math.sin(curve.startAngle) };
+    const end = { x: curve.center.x + curve.radius * Math.cos(curve.endAngle), y: curve.center.y + curve.radius * Math.sin(curve.endAngle) };
+    const largeArc = curve.sweepDegrees > 180 ? 1 : 0;
+    return `<path d="M ${start.x} ${start.y} A ${curve.radius} ${curve.radius} 0 ${largeArc} 1 ${end.x} ${end.y}" fill="none" stroke="#ff40ff" stroke-width="2.5"><title>${escapeXml(curve.id)} · arc · ${curve.sweepDegrees} degrees · ${escapeXml(curve.source)}</title></path>`;
+  }).join('');
   const pointSvg = features.points.map(point =>
     `<circle cx="${point.x}" cy="${point.y}" r="${point.type === 'cross-junction' || point.type === 't-junction' ? 5 : 3}" fill="${colors[point.type] || colors.junction}" stroke="#111" stroke-width="1"><title>${escapeXml(point.id)} · ${escapeXml(point.type)} · degree ${point.degree} · ${escapeXml(point.incidentLineIds.join(', '))}</title></circle>`
   ).join('');
   const legendItems = mode === 'structural'
-    ? [['#00e676', '墙带/结构支持线'], [colors.endpoint, '端点'], [colors.corner, '角点'], [colors['t-junction'], 'T 连接'], [colors['cross-junction'], '十字交叉']]
+    ? [['#00e676', '墙带/结构支持线'], [colors.endpoint, '端点'], [colors.corner, '角点'], [colors['t-junction'], 'T 连接'], [colors['cross-junction'], '十字交叉'], ['#ff1744', '未连接端点/间隙'], ['#ff40ff', '弧线候选']]
     : [['#00e676', '墙/结构来源线'], ['#ff8c42', '尺寸/标注来源线'], ['#42a5f5', '其他来源线'], [colors.endpoint, '端点'], [colors.corner, '角点'], [colors['t-junction'], 'T 连接'], [colors['cross-junction'], '十字交叉']];
   const legend = legendItems.map(([color, label], index) =>
     `<g transform="translate(16 ${28 + index * 24})"><rect width="12" height="12" fill="${color}"/><text x="20" y="11" font-size="14" fill="#fff">${escapeXml(label)}</text></g>`
   ).join('');
   const panelHeight = 20 + legendItems.length * 24;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><image x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" href="${imageData}"/><g>${lineSvg}${pointSvg}</g><g><rect x="8" y="8" width="230" height="${panelHeight}" rx="6" fill="#111" opacity=".78"/>${legend}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><image x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" href="${imageData}"/><g>${lineSvg}${curveSvg}${gapSvg}${pointSvg}</g><g><rect x="8" y="8" width="230" height="${panelHeight}" rx="6" fill="#111" opacity=".78"/>${legend}</g></svg>`;
 }
 
 const imagePath = path.resolve(arg('--image'));
