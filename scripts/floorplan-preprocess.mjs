@@ -1415,7 +1415,7 @@ def classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index):
     }
 
 def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
-    if bw < 18 or bh < 12 or bw > w * 0.26 or bh > h * 0.22:
+    if bw < 14 or bh < 10 or bw > w * 0.26 or bh > h * 0.22:
         return None
     annotation = classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index)
     if annotation:
@@ -1439,10 +1439,14 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
         symbol_type = "cabinet"
         confidence = 0.5 + min(0.1, bw / max(w, 1))
         reasons.append("long-low-cabinet-outline")
-    elif 0.78 <= aspect <= 1.25 and 22 <= bw <= max(48, int(w * 0.055)) and 22 <= bh <= max(48, int(h * 0.055)):
-        symbol_type = "nightstand" if rect_area <= w * h * 0.001 else "chair"
-        confidence = 0.48 + min(0.08, fill)
-        reasons.append("compact-square-seat-or-bedside")
+    elif 0.78 <= aspect <= 1.25 and 18 <= bw <= max(64, int(w * 0.065)) and 16 <= bh <= max(64, int(h * 0.065)):
+        symbol_type = "nightstand_or_chair"
+        confidence = 0.46 + min(0.08, fill)
+        reasons.append("compact-square-seat-or-bedside-needs-context")
+    elif 0.72 <= aspect <= 1.38 and bw >= 14 and bh >= 10 and max(bw, bh) <= max(100, int(min(w, h) * 0.11)):
+        symbol_type = "small_table_or_fixture"
+        confidence = 0.43 + min(0.08, fill)
+        reasons.append("compact-small-closed-contour-needs-context")
     elif 1.2 <= aspect <= 3.8 and bw > 46 and bh > 18 and fill < 0.36:
         symbol_type = "sofa_or_table"
         confidence = 0.48 + min(0.12, bw / max(w, 1))
@@ -1476,7 +1480,10 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
 def detect_furniture_symbol_candidates():
     symbol_seed = cv2.bitwise_and(closed, cv2.bitwise_not(cv2.dilate(structural_wall_seed, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11)), iterations=1)))
     symbol_seed = cv2.morphologyEx(symbol_seed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
-    contours_symbols, _ = cv2.findContours(symbol_seed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # RETR_LIST retains nested contours (e.g. a bed frame with a mattress/pillow
+    # outline, chair seat inside its frame, or a table top inside a border).
+    # The overlap deduper below still removes near-identical duplicates.
+    contours_symbols, _ = cv2.findContours(symbol_seed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     candidates = []
     annotations = []
     def overlaps_window_symbol(x, y, bw, bh):
@@ -1489,7 +1496,10 @@ def detect_furniture_symbol_candidates():
         return False
     for contour in contours_symbols:
         contour_area = float(cv2.contourArea(contour))
-        if contour_area < max(70, w * h * 0.00007):
+        # Keep smaller closed contours as proposals too: bedside tables, chairs,
+        # and compact round/square tables can be much smaller than beds/sofas.
+        # Annotation classification and spatial context downstream help reject noise.
+        if contour_area < max(42, w * h * 0.000035):
             continue
         x, y, bw, bh = cv2.boundingRect(contour)
         candidate = classify_symbol_rect(x, y, bw, bh, bw * bh, contour_area, len(candidates) + 1)
