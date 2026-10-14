@@ -1789,13 +1789,36 @@ def enrich_symbol_spatial_context(candidates, rooms, peers):
             if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
                 containing.append(room)
         if containing:
-            # Prefer the smallest containing region to avoid assigning a small
-            # fixture to a large overlapping corridor/whole-plan candidate.
-            room = min(containing, key=lambda value: value["width"] * value["height"])
+            # Room-interior extraction can produce overlapping grid cells as well
+            # as true room regions. Do not silently treat the smallest rectangle
+            # as the room: retain alternatives and mark ambiguous assignments.
+            ranked_rooms = sorted(
+                containing,
+                key=lambda value: (
+                    float(value.get("perimeterWallScore", 0.0)),
+                    float(value.get("confidence", 0.5)),
+                    -float(value.get("width", 0) * value.get("height", 0))
+                ),
+                reverse=True
+            )
+            room = ranked_rooms[0]
+            ambiguous = len(ranked_rooms) > 1 and (
+                float(ranked_rooms[0].get("confidence", 0.5))
+                - float(ranked_rooms[1].get("confidence", 0.5))
+            ) < 0.08 and not ranked_rooms[0].get("perimeterWallScore")
             item["spatialContext"] = {
                 "roomCandidateId": room.get("id"),
-                "roomAssignment": "center-contained",
-                "roomConfidence": round(float(room.get("confidence", 0.5)), 3)
+                "roomAssignment": "ambiguous-overlapping-room-candidates" if ambiguous else "center-contained",
+                "roomConfidence": round(float(room.get("confidence", 0.5)) * (0.72 if ambiguous else 1.0), 3),
+                "containingRoomCandidates": [
+                    {
+                        "id": candidate.get("id"),
+                        "confidence": round(float(candidate.get("confidence", 0.5)), 3),
+                        "area": int(candidate.get("width", 0) * candidate.get("height", 0)),
+                        "perimeterWallScore": candidate.get("perimeterWallScore")
+                    }
+                    for candidate in ranked_rooms[:5]
+                ]
             }
         else:
             distances = []
