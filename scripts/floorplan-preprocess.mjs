@@ -1678,6 +1678,21 @@ def detect_furniture_symbol_candidates():
         x, y, bw, bh = cv2.boundingRect(contour)
         candidate = classify_symbol_rect(x, y, bw, bh, bw * bh, contour_area, len(candidates) + 1)
         if candidate:
+            # Preserve contour shape evidence for downstream semantic ranking.
+            # A bounding rectangle alone cannot distinguish round tables from
+            # square stools/nightstands; circularity is useful but not decisive.
+            circularity = contour_circularity(contour)
+            candidate["contourCircularity"] = round(float(circularity), 3)
+            candidate["shapeEvidence"] = []
+            if 0.78 <= (bw / max(1, bh)) <= 1.25 and circularity >= 0.62:
+                candidate["shapeEvidence"].append("near-circular-closed-contour")
+                candidate["evidence"].append("near-circular-closed-contour")
+                if candidate["type"] in ("nightstand_or_chair", "small_table_or_fixture", "table_or_fixture"):
+                    candidate["type"] = "round_table_or_stool_candidate"
+                    candidate["confidence"] = round(min(candidate["confidence"], 0.58), 3)
+                    candidate["evidence"].append("round-table-vs-stool-needs-spatial-context")
+            elif circularity <= 0.18:
+                candidate["shapeEvidence"].append("fragmented_or_highly_concave-contour")
             if candidate["source"] == "annotation-dimension-scanner":
                 annotations.append(candidate)
                 continue
