@@ -611,6 +611,43 @@ def detect_local_wall_segment_candidates():
             "source": "fine-scale-dark-directional-scan",
             "needsTopologyCheck": True
         })
+    # Complement directional morphology with compact dark-block contours.
+    # This catches short wall returns attached to larger wall bands, where a
+    # connected-component pass alone can merge the stub into the full wall.
+    local_dark = cv2.inRange(gray, 0, 82)
+    local_dark = cv2.morphologyEx(
+        local_dark, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1
+    )
+    contours_local, _ = cv2.findContours(local_dark, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours_local:
+        x, y, bw, bh = cv2.boundingRect(contour)
+        area = float(cv2.contourArea(contour))
+        if area < 90 or bw < 9 or bh < 7 or bw > max(110, int(w * 0.09)) or bh > max(100, int(h * 0.10)):
+            continue
+        horizontal_like = bw >= bh * 1.15 and bh <= max(36, int(h * 0.05))
+        vertical_like = bh >= bw * 1.15 and bw <= max(36, int(w * 0.05))
+        compact_block = 0.72 <= (bw / max(1.0, bh)) <= 1.38 and bw <= 48 and bh <= 48
+        if not (horizontal_like or vertical_like or compact_block):
+            continue
+        roi = gray[y:y+bh, x:x+bw]
+        dark_ratio = float(np.count_nonzero(roi <= 82)) / max(1, bw * bh)
+        if dark_ratio < 0.68:
+            continue
+        orientation = "horizontal" if horizontal_like else ("vertical" if vertical_like else "compact")
+        length = bw if orientation == "horizontal" else bh
+        thickness = bh if orientation == "horizontal" else bw
+        candidates.append({
+            "id": "local-wall-dark-contour-%d" % (len(candidates) + 1),
+            "type": "short-wall-segment" if not compact_block else "wall-nib-or-column-candidate",
+            "orientation": orientation,
+            "x": int(x), "y": int(y), "width": int(bw), "height": int(bh),
+            "area": int(area), "length": int(length), "thickness": int(thickness),
+            "darkPixelRatio": round(dark_ratio, 3),
+            "confidence": round(min(0.78, 0.46 + min(0.2, dark_ratio * 0.2) + min(0.1, max(bw, bh) / max(w, h))), 3),
+            "source": "fine-scale-local-dark-contour",
+            "needsTopologyCheck": True
+        })
     # Remove near-duplicates while retaining distinct adjacent short segments.
     candidates.sort(key=lambda item: (item["confidence"], item["area"]), reverse=True)
     kept = []
