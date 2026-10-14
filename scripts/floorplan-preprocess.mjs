@@ -1390,13 +1390,30 @@ def classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index):
     tall_margin_text = near_right_margin and bh >= 38 and bw <= 70
     tall_margin_frame = (near_right_margin or near_left_margin or near_bottom_margin) and bh >= 55 and bw <= 90
     isolated_margin_mark = compact_mark and (near_top_margin or near_bottom_margin or near_right_margin or near_left_margin)
-    if not (isolated_margin_mark or tall_margin_text or tall_margin_frame):
+    # Dimension strings and their long extension/measurement frames often form
+    # large thin rectangles at the top/bottom drawing margins. They must not be
+    # promoted to wardrobes/cabinets merely because they are wide and shallow.
+    margin_dimension_frame = (
+        (near_top_margin or near_bottom_margin)
+        and aspect >= 3.2
+        and bh <= max(22, int(h * 0.028))
+        and bw >= max(70, int(w * 0.05))
+    )
+    wide_margin_frame = (
+        (near_top_margin or near_bottom_margin)
+        and bw >= max(150, int(w * 0.10))
+        and bh <= max(125, int(h * 0.13))
+        and fill < 0.42
+    )
+    if not (isolated_margin_mark or tall_margin_text or tall_margin_frame or margin_dimension_frame or wide_margin_frame):
         return None
     evidence = [
         "near-drawing-margin",
         "compact-dimension-or-auxiliary-mark" if compact_mark else "",
         "right-margin-vertical-dimension-text" if tall_margin_text else "",
-        "margin-vertical-auxiliary-frame" if tall_margin_frame else ""
+        "margin-vertical-auxiliary-frame" if tall_margin_frame else "",
+        "long-thin-margin-dimension-frame" if margin_dimension_frame else "",
+        "wide-margin-outline-likely-annotation" if wide_margin_frame else ""
     ]
     return {
         "id": "annotation-symbol-%d" % candidate_index,
