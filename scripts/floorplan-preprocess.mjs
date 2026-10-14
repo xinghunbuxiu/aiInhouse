@@ -561,6 +561,72 @@ def structural_wall_vectors(mask):
         })
     return sorted(vectors, key=lambda item: item["area"], reverse=True)
 
+def detect_local_wall_segment_candidates():
+    # A second, fine-scale pass complements long wall bands. Short wall returns,
+    # nibs and wall stubs can be erased by the large kernels used for primary
+    # structural lines, so scan dark pixels with smaller directional kernels.
+    seed = cv2.bitwise_or(very_dark_closed, structural_wall_seed)
+    horizontal = cv2.morphologyEx(
+        seed, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(11, w // 100), 3)),
+        iterations=1
+    )
+    vertical = cv2.morphologyEx(
+        seed, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, max(11, h // 100))),
+        iterations=1
+    )
+    fine = cv2.bitwise_or(horizontal, vertical)
+    fine = cv2.morphologyEx(fine, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(fine, 8)
+    candidates = []
+    for label in range(1, count):
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        bw = int(stats[label, cv2.CC_STAT_WIDTH])
+        bh = int(stats[label, cv2.CC_STAT_HEIGHT])
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < 48 or bw < 9 or bh < 7:
+            continue
+        horizontal_like = bw >= max(10, bh * 1.35) and bh <= max(30, int(h * 0.045))
+        vertical_like = bh >= max(10, bw * 1.35) and bw <= max(30, int(w * 0.045))
+        if not (horizontal_like or vertical_like):
+            continue
+        # Require dark structural support, not merely a thin annotation stroke.
+        roi = gray[y:y+bh, x:x+bw]
+        dark_ratio = float(np.count_nonzero(roi <= 95)) / max(1, bw * bh)
+        if dark_ratio < 0.52:
+            continue
+        orientation = "horizontal" if horizontal_like else "vertical"
+        length = bw if orientation == "horizontal" else bh
+        thickness = bh if orientation == "horizontal" else bw
+        candidates.append({
+            "id": "local-wall-segment-%d" % (len(candidates) + 1),
+            "type": "short-wall-segment",
+            "orientation": orientation,
+            "x": x, "y": y, "width": bw, "height": bh,
+            "area": area, "length": length, "thickness": thickness,
+            "darkPixelRatio": round(dark_ratio, 3),
+            "confidence": round(min(0.82, 0.48 + min(0.22, dark_ratio * 0.22) + min(0.12, length / max(w, h) * 0.8)), 3),
+            "source": "fine-scale-dark-directional-scan",
+            "needsTopologyCheck": True
+        })
+    # Remove near-duplicates while retaining distinct adjacent short segments.
+    candidates.sort(key=lambda item: (item["confidence"], item["area"]), reverse=True)
+    kept = []
+    for item in candidates:
+        duplicate = False
+        for other in kept:
+            ix = max(0, min(item["x"] + item["width"], other["x"] + other["width"]) - max(item["x"], other["x"]))
+            iy = max(0, min(item["y"] + item["height"], other["y"] + other["height"]) - max(item["y"], other["y"]))
+            inter = ix * iy
+            if inter / max(1, min(item["area"], other["area"])) > 0.78:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(item)
+    return sorted(kept, key=lambda item: (item["y"], item["x"]))
+
 def detect_balcony_candidates():
     light_line = cv2.inRange(gray, 105, 218)
     line_seed = cv2.bitwise_or(light_line, dark_binary)
@@ -1767,6 +1833,12 @@ cv2.imwrite(debug_walls, wall_debug)
 structural_wall_mask = cv2.dilate(structural_wall_seed, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
 cv2.imwrite(debug_structural_wall_mask, structural_wall_mask)
 wall_vectors = structural_wall_vectors(structural_wall_mask)
+local_wall_segment_candidates = detect_local_wall_segment_candidates()
+debug_local_wall_segments = output_dir + "/vision-local-wall-segments.png"
+local_wall_debug = np.zeros_like(gray)
+for item in local_wall_segment_candidates:
+    cv2.rectangle(local_wall_debug, (item["x"], item["y"]), (item["x"] + item["width"], item["y"] + item["height"]), 255, 2)
+cv2.imwrite(debug_local_wall_segments, local_wall_debug)
 dark_rectangle_candidates = detect_dark_rectangle_candidates()
 balcony_candidates, balcony_outline = detect_balcony_candidates()
 room_interior_candidates, room_interiors_debug = detect_room_interior_candidates()
@@ -1964,6 +2036,8 @@ print(json.dumps({
         "rejectedWallBandCount": len(rejected_axis_candidates),
         "structuralWallVectorCount": len(wall_vectors),
         "structuralWallVectors": wall_vectors,
+        "localWallSegmentCandidateCount": len(local_wall_segment_candidates),
+        "localWallSegmentCandidates": local_wall_segment_candidates,
         "darkRectangleCandidateCount": len(dark_rectangle_candidates),
         "darkRectangleCandidates": dark_rectangle_candidates,
         "balconyCandidateCount": len(balcony_candidates),
@@ -1984,7 +2058,7 @@ print(json.dumps({
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
     "ocrCandidates": [],
-    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
+    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
 
