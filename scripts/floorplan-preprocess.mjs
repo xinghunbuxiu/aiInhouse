@@ -1738,7 +1738,8 @@ def detect_furniture_symbol_candidates():
             # Distance is normalized by the combined object scale, so the rule
             # works across differently sized floor-plan exports.
             normalized_distance = distance / max(1.0, (diagonal + other_diagonal) / 2)
-            if normalized_distance <= 2.8:
+            # Keep relations local to reduce cross-room associations.
+            if normalized_distance <= 1.85:
                 neighbors.append({
                     "candidateId": other["id"],
                     "type": other.get("type"),
@@ -1749,6 +1750,7 @@ def detect_furniture_symbol_candidates():
         candidate["localFurnitureRelations"] = {
             "nearbyFurnitureCount": len(neighbors),
             "nearestFurniture": neighbors[:5],
+            "relationRadiusNormalized": 1.85,
             "evidence": []
         }
         if candidate.get("type") == "round_table_or_stool_candidate":
