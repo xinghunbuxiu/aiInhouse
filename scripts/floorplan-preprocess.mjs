@@ -1912,6 +1912,39 @@ structural_wall_mask = cv2.dilate(structural_wall_seed, cv2.getStructuringElemen
 cv2.imwrite(debug_structural_wall_mask, structural_wall_mask)
 wall_vectors = structural_wall_vectors(structural_wall_mask)
 local_wall_segment_candidates = detect_local_wall_segment_candidates()
+# Inspect junctions between independently detected horizontal and vertical dark
+# structures. Short wall returns can be fused into a long wall component and
+# therefore disappear from connected-component candidates; junction ROIs keep
+# those locations visible for downstream topology checks.
+wall_junction_mask = cv2.bitwise_and(structural_horizontal, structural_vertical)
+wall_junction_mask = cv2.dilate(wall_junction_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=1)
+junction_count, _, junction_stats, _ = cv2.connectedComponentsWithStats(wall_junction_mask, 8)
+wall_junction_candidates = []
+for junction_label in range(1, junction_count):
+    jx = int(junction_stats[junction_label, cv2.CC_STAT_LEFT])
+    jy = int(junction_stats[junction_label, cv2.CC_STAT_TOP])
+    jw = int(junction_stats[junction_label, cv2.CC_STAT_WIDTH])
+    jh = int(junction_stats[junction_label, cv2.CC_STAT_HEIGHT])
+    jarea = int(junction_stats[junction_label, cv2.CC_STAT_AREA])
+    if jarea < 9 or jw > max(70, int(w * 0.06)) or jh > max(70, int(h * 0.07)):
+        continue
+    wall_junction_candidates.append({
+        "id": "wall-junction-%d" % (len(wall_junction_candidates) + 1),
+        "type": "wall-junction-or-return",
+        "x": jx, "y": jy, "width": jw, "height": jh,
+        "area": jarea,
+        "confidence": 0.55,
+        "source": "horizontal-vertical-structural-mask-intersection",
+        "needsTopologyCheck": True
+    })
+debug_wall_junction_overlay = output_dir + "/vision-wall-junctions-overlay.jpg"
+wall_junction_overlay = image.copy()
+for item in wall_junction_candidates:
+    x1, y1 = item["x"], item["y"]
+    x2, y2 = x1 + item["width"], y1 + item["height"]
+    cv2.rectangle(wall_junction_overlay, (x1, y1), (x2, y2), (0, 220, 0), 2)
+    cv2.putText(wall_junction_overlay, item["id"], (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (0, 160, 0), 1, cv2.LINE_AA)
+cv2.imwrite(debug_wall_junction_overlay, wall_junction_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 debug_local_wall_segments = output_dir + "/vision-local-wall-segments.png"
 local_wall_debug = np.zeros_like(gray)
 local_wall_overlay = image.copy()
@@ -2125,6 +2158,8 @@ print(json.dumps({
         "structuralWallVectors": wall_vectors,
         "localWallSegmentCandidateCount": len(local_wall_segment_candidates),
         "localWallSegmentCandidates": local_wall_segment_candidates,
+        "wallJunctionCandidateCount": len(wall_junction_candidates),
+        "wallJunctionCandidates": wall_junction_candidates,
         "darkRectangleCandidateCount": len(dark_rectangle_candidates),
         "darkRectangleCandidates": dark_rectangle_candidates,
         "balconyCandidateCount": len(balcony_candidates),
@@ -2145,7 +2180,7 @@ print(json.dumps({
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
     "ocrCandidates": [],
-    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
+    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "wallJunctionOverlay": debug_wall_junction_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
 
