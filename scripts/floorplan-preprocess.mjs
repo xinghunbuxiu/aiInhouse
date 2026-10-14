@@ -1745,20 +1745,21 @@ def detect_furniture_symbol_candidates():
                     "normalizedCenterDistance": round(normalized_distance, 2)
                 })
         neighbors.sort(key=lambda item: item["normalizedCenterDistance"])
-        candidate["spatialContext"] = {
+        # Use a dedicated field: downstream room assignment owns spatialContext.
+        candidate["localFurnitureRelations"] = {
             "nearbyFurnitureCount": len(neighbors),
             "nearestFurniture": neighbors[:5],
             "evidence": []
         }
         if candidate.get("type") == "round_table_or_stool_candidate":
             if len(neighbors) >= 3:
-                candidate["spatialContext"]["evidence"].append("clustered-with-multiple-nearby-furniture-symbols")
+                candidate["localFurnitureRelations"]["evidence"].append("clustered-with-multiple-nearby-furniture-symbols")
                 candidate["evidence"].append("spatial-cluster-may-support-table-with-seating")
             else:
-                candidate["spatialContext"]["evidence"].append("insufficient-nearby-symbols-to-disambiguate-round-table-and-stool")
+                candidate["localFurnitureRelations"]["evidence"].append("insufficient-nearby-symbols-to-disambiguate-round-table-and-stool")
         if candidate.get("type") in ("table_or_fixture", "small_table_or_fixture", "round_table_or_stool_candidate"):
             if any(item["type"] in ("chair", "nightstand_or_chair", "round_table_or_stool_candidate") for item in neighbors):
-                candidate["spatialContext"]["evidence"].append("nearby-seat-or-compact-furniture")
+                candidate["localFurnitureRelations"]["evidence"].append("nearby-seat-or-compact-furniture")
     for index, candidate in enumerate(annotations):
         candidate["id"] = "annotation-symbol-%d" % (index + 1)
     return deduped, annotations[:80]
