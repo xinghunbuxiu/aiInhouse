@@ -1387,9 +1387,19 @@ def classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index):
     near_right_margin = x + bw > w * 0.84
     near_left_margin = x < w * 0.14
     compact_mark = bw <= max(80, w * 0.075) and bh <= max(76, h * 0.078)
-    tall_margin_text = near_right_margin and bh >= 38 and bw <= 70
-    tall_margin_frame = (near_right_margin or near_left_margin or near_bottom_margin) and bh >= 55 and bw <= 90
-    isolated_margin_mark = compact_mark and (near_top_margin or near_bottom_margin or near_right_margin or near_left_margin)
+    tall_margin_text = near_right_margin and bh >= 38 and bw <= 70 and fill < 0.55
+    # A tall narrow frame at the sheet edge can be dimension text, but broad
+    # filled outlines near the left/right edge are often real balcony furniture.
+    tall_margin_frame = (near_right_margin or near_left_margin or near_bottom_margin) and bh >= 55 and bw <= 90 and fill < 0.48
+    # Do not classify every small object near a side margin as annotation:
+    # chairs and planters on balconies commonly sit against the left/right edge.
+    isolated_margin_mark = (
+        compact_mark
+        and (near_top_margin or near_bottom_margin)
+        and bw <= max(48, int(w * 0.04))
+        and bh <= max(44, int(h * 0.045))
+        and fill < 0.62
+    )
     # Dimension strings and their long extension/measurement frames often form
     # large thin rectangles at the top/bottom drawing margins. They must not be
     # promoted to wardrobes/cabinets merely because they are wide and shallow.
