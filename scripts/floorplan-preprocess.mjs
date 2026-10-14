@@ -621,19 +621,25 @@ def detect_local_wall_segment_candidates():
             dw = int(directional_stats[directional_label, cv2.CC_STAT_WIDTH])
             dh = int(directional_stats[directional_label, cv2.CC_STAT_HEIGHT])
             darea = int(directional_stats[directional_label, cv2.CC_STAT_AREA])
-            if darea < 36 or dw < 8 or dh < 6:
+            if darea < 42 or dw < 8 or dh < 6:
                 continue
             if direction == "horizontal":
-                if dw < max(8, dh * 1.2) or dh > max(34, int(h * 0.05)):
+                if dw < max(8, dh * 1.15) or dh > max(34, int(h * 0.05)):
                     continue
                 length, thickness = dw, dh
             else:
-                if dh < max(8, dw * 1.2) or dw > max(34, int(w * 0.05)):
+                if dh < max(8, dw * 1.15) or dw > max(34, int(w * 0.05)):
                     continue
                 length, thickness = dh, dw
             roi = gray[dy:dy+dh, dx:dx+dw]
             dark_ratio = float(np.count_nonzero(roi <= 95)) / max(1, dw * dh)
-            if dark_ratio < 0.48:
+            # Small annotation fragments (e.g. the Chinese room label "阳台")
+            # can pass directional morphology; require stronger dark support.
+            if dark_ratio < 0.62:
+                continue
+            # This channel is for local returns, not another detector for long
+            # wall bands already covered by structural_wall_vectors.
+            if length > max(150, int(max(w, h) * 0.14)):
                 continue
             candidates.append({
                 "id": "directional-wall-return-%s-%d" % (direction, len(candidates) + 1),
