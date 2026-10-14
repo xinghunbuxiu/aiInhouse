@@ -1937,6 +1937,42 @@ for junction_label in range(1, junction_count):
         "source": "horizontal-vertical-structural-mask-intersection",
         "needsTopologyCheck": True
     })
+# Enrich junctions with geometric support from independently scanned short
+# segments and the main structural vectors. Keep raw candidates intact; this is
+# evidence for downstream review, not an automatic wall merge.
+for junction in wall_junction_candidates:
+    jx1, jy1 = junction["x"], junction["y"]
+    jx2, jy2 = jx1 + junction["width"], jy1 + junction["height"]
+    local_support = []
+    for segment in local_wall_segment_candidates:
+        sx1, sy1 = segment["x"], segment["y"]
+        sx2, sy2 = sx1 + segment["width"], sy1 + segment["height"]
+        ix = max(0, min(jx2, sx2) - max(jx1, sx1))
+        iy = max(0, min(jy2, sy2) - max(jy1, sy1))
+        if ix > 0 and iy > 0:
+            local_support.append({
+                "candidateId": segment["id"],
+                "orientation": segment.get("orientation"),
+                "overlapArea": int(ix * iy),
+                "confidence": segment.get("confidence", 0.5)
+            })
+    vector_support = []
+    for vector in wall_vectors:
+        vx1, vy1 = vector["x"], vector["y"]
+        vx2, vy2 = vx1 + vector["width"], vy1 + vector["height"]
+        ix = max(0, min(jx2, vx2) - max(jx1, vx1))
+        iy = max(0, min(jy2, vy2) - max(jy1, vy1))
+        if ix > 0 and iy > 0:
+            vector_support.append({
+                "candidateId": vector["id"],
+                "overlapArea": int(ix * iy),
+                "confidence": vector.get("confidence", 0.5)
+            })
+    junction["supportingLocalWallSegments"] = sorted(local_support, key=lambda item: item["overlapArea"], reverse=True)[:4]
+    junction["supportingStructuralVectors"] = sorted(vector_support, key=lambda item: item["overlapArea"], reverse=True)[:4]
+    support_score = min(0.18, 0.06 * len(local_support)) + min(0.12, 0.04 * len(vector_support))
+    junction["geometryEvidenceScore"] = round(support_score, 3)
+    junction["reviewPriority"] = "high" if local_support and vector_support else ("medium" if local_support or vector_support else "low")
 debug_wall_junction_overlay = output_dir + "/vision-wall-junctions-overlay.jpg"
 wall_junction_overlay = image.copy()
 for item in wall_junction_candidates:
