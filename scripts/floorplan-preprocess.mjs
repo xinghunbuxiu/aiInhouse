@@ -1598,11 +1598,10 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
     symbol_type = None
     confidence = 0.42
     reasons = []
-    if 1.35 <= aspect <= 2.9 and rect_area > w * h * 0.003:
-        symbol_type = "bed"
-        confidence = 0.54 + min(0.14, rect_area / max(w * h, 1) * 8)
-        reasons.append("large-bedroom-rectangle")
-    elif aspect >= 2.5 and bh <= max(36, int(h * 0.055)) and bw >= max(70, int(w * 0.08)):
+    # Classify long, shallow furniture before large bed-like rectangles.
+    # Otherwise a wardrobe/TV cabinet with aspect 1.8-2.8 can be swallowed by
+    # the broad bed rule simply because its contour area is large.
+    if aspect >= 2.5 and bh <= max(36, int(h * 0.055)) and bw >= max(70, int(w * 0.08)):
         symbol_type = "wardrobe"
         confidence = 0.52 + min(0.12, bw / max(w, 1))
         reasons.append("long-thin-wardrobe-outline")
@@ -1610,6 +1609,10 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
         symbol_type = "cabinet"
         confidence = 0.5 + min(0.1, bw / max(w, 1))
         reasons.append("long-low-cabinet-outline")
+    elif 1.35 <= aspect <= 2.9 and rect_area > w * h * 0.003:
+        symbol_type = "bed"
+        confidence = 0.54 + min(0.14, rect_area / max(w * h, 1) * 8)
+        reasons.append("large-bedroom-rectangle")
     elif 0.78 <= aspect <= 1.25 and 18 <= bw <= max(64, int(w * 0.065)) and 16 <= bh <= max(64, int(h * 0.065)):
         symbol_type = "nightstand_or_chair"
         confidence = 0.46 + min(0.08, fill)
