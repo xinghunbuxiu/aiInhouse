@@ -1908,9 +1908,18 @@ wall_vectors = structural_wall_vectors(structural_wall_mask)
 local_wall_segment_candidates = detect_local_wall_segment_candidates()
 debug_local_wall_segments = output_dir + "/vision-local-wall-segments.png"
 local_wall_debug = np.zeros_like(gray)
+local_wall_overlay = image.copy()
 for item in local_wall_segment_candidates:
-    cv2.rectangle(local_wall_debug, (item["x"], item["y"]), (item["x"] + item["width"], item["y"] + item["height"]), 255, 2)
+    x1, y1 = item["x"], item["y"]
+    x2, y2 = x1 + item["width"], y1 + item["height"]
+    cv2.rectangle(local_wall_debug, (x1, y1), (x2, y2), 255, 2)
+    color = (0, 180, 255) if item.get("orientation") == "compact" else (255, 80, 0)
+    cv2.rectangle(local_wall_overlay, (x1, y1), (x2, y2), color, 2)
+    label = "%s %.2f" % (item.get("orientation", "?"), item.get("confidence", 0))
+    cv2.putText(local_wall_overlay, label, (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.36, color, 1, cv2.LINE_AA)
 cv2.imwrite(debug_local_wall_segments, local_wall_debug)
+debug_local_wall_overlay = output_dir + "/vision-local-wall-segments-overlay.jpg"
+cv2.imwrite(debug_local_wall_overlay, local_wall_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
 dark_rectangle_candidates = detect_dark_rectangle_candidates()
 balcony_candidates, balcony_outline = detect_balcony_candidates()
 room_interior_candidates, room_interiors_debug = detect_room_interior_candidates()
@@ -2130,7 +2139,7 @@ print(json.dumps({
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
     "ocrCandidates": [],
-    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
+    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
 
