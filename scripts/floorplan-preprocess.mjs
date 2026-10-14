@@ -611,6 +611,41 @@ def detect_local_wall_segment_candidates():
             "source": "fine-scale-dark-directional-scan",
             "needsTopologyCheck": True
         })
+    # Keep directional components separate. Unioning horizontal and vertical
+    # masks first can let a long wall absorb a short perpendicular return.
+    for direction, directional_mask in (("horizontal", horizontal), ("vertical", vertical)):
+        directional_count, _, directional_stats, _ = cv2.connectedComponentsWithStats(directional_mask, 8)
+        for directional_label in range(1, directional_count):
+            dx = int(directional_stats[directional_label, cv2.CC_STAT_LEFT])
+            dy = int(directional_stats[directional_label, cv2.CC_STAT_TOP])
+            dw = int(directional_stats[directional_label, cv2.CC_STAT_WIDTH])
+            dh = int(directional_stats[directional_label, cv2.CC_STAT_HEIGHT])
+            darea = int(directional_stats[directional_label, cv2.CC_STAT_AREA])
+            if darea < 36 or dw < 8 or dh < 6:
+                continue
+            if direction == "horizontal":
+                if dw < max(8, dh * 1.2) or dh > max(34, int(h * 0.05)):
+                    continue
+                length, thickness = dw, dh
+            else:
+                if dh < max(8, dw * 1.2) or dw > max(34, int(w * 0.05)):
+                    continue
+                length, thickness = dh, dw
+            roi = gray[dy:dy+dh, dx:dx+dw]
+            dark_ratio = float(np.count_nonzero(roi <= 95)) / max(1, dw * dh)
+            if dark_ratio < 0.48:
+                continue
+            candidates.append({
+                "id": "directional-wall-return-%s-%d" % (direction, len(candidates) + 1),
+                "type": "short-wall-segment",
+                "orientation": direction,
+                "x": dx, "y": dy, "width": dw, "height": dh,
+                "area": darea, "length": length, "thickness": thickness,
+                "darkPixelRatio": round(dark_ratio, 3),
+                "confidence": round(min(0.76, 0.42 + min(0.22, dark_ratio * 0.22) + min(0.12, length / max(w, h))), 3),
+                "source": "separate-directional-component-scan",
+                "needsTopologyCheck": True
+            })
     # Complement directional morphology with compact dark-block contours.
     # This catches short wall returns attached to larger wall bands, where a
     # connected-component pass alone can merge the stub into the full wall.
