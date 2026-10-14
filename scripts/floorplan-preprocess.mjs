@@ -1720,6 +1720,45 @@ def detect_furniture_symbol_candidates():
             break
     for index, candidate in enumerate(deduped):
         candidate["id"] = "furniture-symbol-%d" % (index + 1)
+    # Add relational evidence after deduplication. A single contour often cannot
+    # tell a round table from a stool or a square table from a nightstand, but
+    # nearby seat-like symbols and repeated spacing provide useful context.
+    for candidate in deduped:
+        cx = candidate["x"] + candidate["width"] / 2
+        cy = candidate["y"] + candidate["height"] / 2
+        diagonal = max(1.0, float(np.hypot(candidate["width"], candidate["height"])))
+        neighbors = []
+        for other in deduped:
+            if other is candidate:
+                continue
+            ox = other["x"] + other["width"] / 2
+            oy = other["y"] + other["height"] / 2
+            distance = float(np.hypot(cx - ox, cy - oy))
+            other_diagonal = float(np.hypot(other["width"], other["height"]))
+            # Distance is normalized by the combined object scale, so the rule
+            # works across differently sized floor-plan exports.
+            normalized_distance = distance / max(1.0, (diagonal + other_diagonal) / 2)
+            if normalized_distance <= 2.8:
+                neighbors.append({
+                    "candidateId": other["id"],
+                    "type": other.get("type"),
+                    "normalizedCenterDistance": round(normalized_distance, 2)
+                })
+        neighbors.sort(key=lambda item: item["normalizedCenterDistance"])
+        candidate["spatialContext"] = {
+            "nearbyFurnitureCount": len(neighbors),
+            "nearestFurniture": neighbors[:5],
+            "evidence": []
+        }
+        if candidate.get("type") == "round_table_or_stool_candidate":
+            if len(neighbors) >= 3:
+                candidate["spatialContext"]["evidence"].append("clustered-with-multiple-nearby-furniture-symbols")
+                candidate["evidence"].append("spatial-cluster-may-support-table-with-seating")
+            else:
+                candidate["spatialContext"]["evidence"].append("insufficient-nearby-symbols-to-disambiguate-round-table-and-stool")
+        if candidate.get("type") in ("table_or_fixture", "small_table_or_fixture", "round_table_or_stool_candidate"):
+            if any(item["type"] in ("chair", "nightstand_or_chair", "round_table_or_stool_candidate") for item in neighbors):
+                candidate["spatialContext"]["evidence"].append("nearby-seat-or-compact-furniture")
     for index, candidate in enumerate(annotations):
         candidate["id"] = "annotation-symbol-%d" % (index + 1)
     return deduped, annotations[:80]
