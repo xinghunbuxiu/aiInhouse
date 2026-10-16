@@ -93,6 +93,10 @@ assert(lineAppearance, 'when a raster is provided, line appearance must be sampl
 assert(lineAppearance.darkPixelRatio > 0.9, 'dark stroke should retain its dark-pixel ratio');
 assert(lineAppearance.centerBackgroundContrast > 100, 'stroke/background contrast should be recorded');
 assert.equal(lineAppearance.interpretation, 'appearance evidence only; not a wall/object label');
+assert.equal(appearance.summary.appearanceSampledFromRasterLineCount, 1,
+  'summary must count each line whose appearance was actually sampled from the raster');
+assert.equal(appearance.lineEvidence[0].appearance.centerBackgroundContrast, lineAppearance.centerBackgroundContrast,
+  'the combined evidence profile must reuse the sampled appearance measurements');
 
 // Preprocessing measurements must survive normalization even when the geometry
 // recognizer is not given the source raster again.
@@ -118,6 +122,14 @@ assert.equal(preserved.summary.appearanceAvailableLineCount, 1,
   'summary must count retained appearance evidence even without a raster');
 assert.equal(preserved.summary.appearanceSampledFromRasterLineCount, 0,
   'precomputed evidence must not be mislabeled as newly sampled raster evidence');
+const preservedWithRaster = extractGeometryFeatures([
+  { id: 'precomputed-with-raster', source: 'hough-edge',
+    start: { x: 1, y: 3 }, end: { x: 10, y: 3 }, appearance: precomputedAppearance }
+], { raster, appearanceSampleRadius: 0, appearanceSampleCount: 7 });
+assert.equal(preservedWithRaster.summary.appearanceSampledFromRasterLineCount, 0,
+  'precomputed appearance should be reused instead of redundantly sampling the raster');
+assert.deepEqual(preservedWithRaster.lines[0].appearance, precomputedAppearance,
+  'raster availability must not overwrite original-pixel preprocessing measurements');
 
 assert.equal(preserved.lineEvidence[0].appearanceAvailable, true,
   'combined evidence profile must consume retained appearance');
