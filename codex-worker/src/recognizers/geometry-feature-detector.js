@@ -339,6 +339,10 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
     minimumParallelOverlap: Number.isFinite(config.minimumParallelOverlap) ? config.minimumParallelOverlap : 20
   };
   const lines = inputLines.map(normalizeSegment).filter(Boolean);
+  // Sample each line at most once. Raster sampling sorts pixel samples and is
+  // comparatively expensive; the old summary/evidence/output paths repeated it.
+  const lineAppearances = lines.map(line => line.appearance || sampleLineAppearance(line, config.raster, config));
+  const rasterSampledLineCount = lines.filter((line, index) => !line.appearance && Boolean(lineAppearances[index])).length;
   const mergedLines = mergeCollinearSegments(inputLines, config);
   const topology = topologyEvidence(lines, options);
   const curves = normalizeCurves(config.curves || []);
@@ -380,10 +384,10 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
   // Join geometric context with measured appearance as a traceable evidence profile.
   // This deliberately does not emit wall/furniture labels: semantic classification
   // needs calibrated training/evaluation data, not a hand-written darkness threshold.
-  const lineEvidence = lines.map(line => {
+  const lineEvidence = lines.map((line, index) => {
     const junctions = points.filter(point => point.incidentLineIds.includes(line.id));
     const parallelRelations = parallelGroups.filter(group => group.lineIds.includes(line.id));
-    const appearance = line.appearance || sampleLineAppearance(line, config.raster, config);
+    const appearance = lineAppearances[index];
     const disconnectedRelations = topology.disconnectedEndpointPairs.filter(pair => pair.lineIds.includes(line.id));
     return {
       lineId: line.id,
@@ -427,14 +431,14 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       isolatedLineCount: topology.isolatedLineIds.length,
       curveCount: curves.length,
       lineSourceCounts: sourceCounts,
-      appearanceAvailableLineCount: lines.filter(line => line.appearance || sampleLineAppearance(line, config.raster, config)).length,
-      appearanceSampledFromRasterLineCount: lines.filter(line => sampleLineAppearance(line, config.raster, config)).length
+      appearanceAvailableLineCount: lineAppearances.filter(Boolean).length,
+      appearanceSampledFromRasterLineCount: rasterSampledLineCount
     },
     mergedLines,
     topology,
     curves,
     lineEvidence,
-    lines: lines.map(line => ({
+    lines: lines.map((line, index) => ({
       id: line.id,
       source: line.source,
       confidence: line.confidence,
@@ -447,7 +451,7 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
       color: line.color,
       // Prefer measurements from the original image; only sample a supplied raster
       // when preprocessing did not already attach appearance evidence.
-      appearance: line.appearance || sampleLineAppearance(line, config.raster, config)
+      appearance: lineAppearances[index]
     })),
     points,
     intersections: rawIntersections.map((item, index) => ({
