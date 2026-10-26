@@ -153,6 +153,7 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
   if (toNumber(geometryEvidence.junctionCount) > 0) topologyEvidence.push(`junctions:${toNumber(geometryEvidence.junctionCount)}`);
   if (toNumber(geometryEvidence.tJunctionCount) > 0) topologyEvidence.push(`T-junctions:${toNumber(geometryEvidence.tJunctionCount)}`);
   if (toNumber(geometryEvidence.endpointJunctionCount) > 0) topologyEvidence.push(`endpoint-junctions:${toNumber(geometryEvidence.endpointJunctionCount)}`);
+  if (toNumber(geometryEvidence.cornerJunctionCount) > 0) topologyEvidence.push(`corner-junctions:${toNumber(geometryEvidence.cornerJunctionCount)}`);
   if (toNumber(geometryEvidence.crossJunctionCount) > 0) topologyEvidence.push(`cross-junctions:${toNumber(geometryEvidence.crossJunctionCount)}`);
   if (toNumber(geometryEvidence.parallelRelationCount) > 0) topologyEvidence.push(`parallel-relations:${toNumber(geometryEvidence.parallelRelationCount)}`);
   if (toNumber(geometryEvidence.nearEndpointGapCount) > 0) topologyEvidence.push(`near-endpoint-gaps:${toNumber(geometryEvidence.nearEndpointGapCount)}`);
