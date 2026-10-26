@@ -375,7 +375,10 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       })();
       if (cross) {
         ea.junctionLineIds.add(b.id); eb.junctionLineIds.add(a.id);
-        const endpointHit = [cross.t, 1-cross.t, cross.u, 1-cross.u].some((v) => v * Math.min(a.length,b.length) <= endpointTolerance);
+        const endpointHit = cross.t * a.length <= endpointTolerance
+          || (1 - cross.t) * a.length <= endpointTolerance
+          || cross.u * b.length <= endpointTolerance
+          || (1 - cross.u) * b.length <= endpointTolerance;
         if (endpointHit) { ea.tJunctionCount += 1; eb.tJunctionCount += 1; }
         else { ea.crossJunctionCount += 1; eb.crossJunctionCount += 1; }
       } else {
