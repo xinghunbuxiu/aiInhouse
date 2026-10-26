@@ -205,6 +205,37 @@ assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
 assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-review'), 'An opening under review without a wall reference must also explain that the attachment is missing.');
+
+// A wall-supported opening can sit just beyond the detected room-interior box.
+// Associate it only when the referenced wall is geometrically consistent.
+const wallSupportedRoomAssociation = validateFloorplanDraft({
+  rooms: [{ id: 'room-supported', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'exterior-wall', start: { x: 125, y: 0 }, end: { x: 125, y: 100 }, thickness: 8 }],
+  doors: [{
+    id: 'supported-exterior-door', x: 120, y: 20, width: 10, height: 60,
+    attachedWallId: 'exterior-wall',
+    sourceEvidence: { attachedWallId: 'exterior-wall', withinWallSpan: true, withinAttachmentSpan: true }
+  }]
+});
+assert(!wallSupportedRoomAssociation.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A nearby room may be associated when the opening has a valid attached-wall reference and lies on that wall');
+assert.strictEqual(wallSupportedRoomAssociation.metrics.openingAssociationRatio, 1,
+  'Wall-supported room association must be reflected in the opening association metric');
+assert(wallSupportedRoomAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-supported'),
+  'The spatial graph must use the same wall-supported room association as validation');
+
+const wallEndpointNearMiss = validateFloorplanDraft({
+  rooms: [{ id: 'room-near-miss', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'exterior-wall', start: { x: 125, y: 0 }, end: { x: 125, y: 100 }, thickness: 8 }],
+  doors: [{
+    id: 'door-beyond-wall-end', x: 120, y: 90, width: 10, height: 60,
+    attachedWallId: 'exterior-wall',
+    sourceEvidence: { attachedWallId: 'exterior-wall', withinWallSpan: true, withinAttachmentSpan: true }
+  }]
+});
+assert(wallEndpointNearMiss.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A claimed wall attachment beyond the measured wall segment must not create room association');
+
 const unlinkedOpening = validateFloorplanDraft({
   rooms: [{ id: 'room-unlinked', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [{ id: 'wall-unlinked', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
