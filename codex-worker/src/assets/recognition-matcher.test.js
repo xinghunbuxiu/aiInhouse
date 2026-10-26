@@ -109,6 +109,14 @@ assert.strictEqual(unequalLengthJunction.find((line) => line.id === 'long-horizo
   'a short branch endpoint on a long segment should be classified as a T-junction using each segment own length');
 assert.strictEqual(unequalLengthJunction.find((line) => line.id === 'short-vertical').geometryEvidence.tJunctionCount, 1,
   'junction classification should be symmetric when segment lengths differ');
+const cornerJunction = enrichLineGeometryEvidence([
+  { id: 'corner-horizontal', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'corner-vertical', start: { x: 100, y: 0 }, end: { x: 100, y: 100 } }
+]);
+assert.strictEqual(cornerJunction.find((line) => line.id === 'corner-horizontal').geometryEvidence.tJunctionCount, 0,
+  'two endpoints meeting at a corner must not be mislabeled as a T-junction');
+assert.strictEqual(cornerJunction.find((line) => line.id === 'corner-horizontal').geometryEvidence.endpointJunctionCount, 1,
+  'corner endpoint relations should remain available as distinct evidence');
 assert.strictEqual(topologyLines.find((line) => line.id === 'isolated').geometryEvidence.junctionCount, 0,
   'isolated geometry must not inherit unrelated junction evidence');
 const topologyMatch = matchWallLineCandidate({
