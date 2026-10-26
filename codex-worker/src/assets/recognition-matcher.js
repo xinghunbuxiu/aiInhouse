@@ -329,6 +329,9 @@ function matchStructuralWallVector(vector = {}, catalog = loadRecognitionAssetCa
 function enrichLineGeometryEvidence(lines = [], options = {}) {
   const endpointTolerance = toNumber(options.endpointTolerance, 5);
   const angleTolerance = toNumber(options.angleToleranceDegrees, 4) * Math.PI / 180;
+  const gapAngleTolerance = toNumber(options.gapAngleToleranceDegrees, 12) * Math.PI / 180;
+  const gapAlignmentTolerance = toNumber(options.gapAlignmentTolerance, endpointTolerance);
+  const nearEndpointGapMax = toNumber(options.nearEndpointGapMax, 16);
   const parallelDistanceMax = toNumber(options.parallelDistanceMax, 48);
   const records = lines.map((line, index) => ({
     line,
@@ -340,7 +343,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
   })).filter((item) => item.start && item.end && item.length > 0);
   const evidence = new Map(records.map((item) => [item.id, {
     junctionLineIds: new Set(), tJunctionCount: 0, crossJunctionCount: 0,
-    parallelLineIds: new Set(), nearEndpointGapCount: 0
+    parallelLineIds: new Set(), nearEndpointGapLineIds: new Set(), nearEndpointGapCount: 0
   }]));
   const pointSegmentDistance = (point, segment) => {
     const ax = toNumber(segment.start.x), ay = toNumber(segment.start.y);
@@ -382,14 +385,32 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
         if (endpointHit) { ea.tJunctionCount += 1; eb.tJunctionCount += 1; }
         else { ea.crossJunctionCount += 1; eb.crossJunctionCount += 1; }
       } else {
-        const gap = Math.min(
-          Math.hypot(a.start.x-b.start.x,a.start.y-b.start.y),
-          Math.hypot(a.start.x-b.end.x,a.start.y-b.end.y),
-          Math.hypot(a.end.x-b.start.x,a.end.y-b.start.y),
-          Math.hypot(a.end.x-b.end.x,a.end.y-b.end.y)
-        );
-        if (gap > endpointTolerance && gap <= 16) {
-          ea.nearEndpointGapCount += 1; eb.nearEndpointGapCount += 1;
+        const endpointPairs = [
+          { first: a.start, second: b.start },
+          { first: a.start, second: b.end },
+          { first: a.end, second: b.start },
+          { first: a.end, second: b.end }
+        ].map((pair) => ({
+          ...pair,
+          dx: toNumber(pair.second.x) - toNumber(pair.first.x),
+          dy: toNumber(pair.second.y) - toNumber(pair.first.y)
+        })).map((pair) => ({ ...pair, gap: Math.hypot(pair.dx, pair.dy) }));
+        const closest = endpointPairs.reduce((best, pair) => pair.gap < best.gap ? pair : best);
+        const parallelEnoughForGap = Math.min(angleDelta, Math.PI - angleDelta) <= gapAngleTolerance;
+        const alongGap = Math.abs(closest.dx * Math.cos(a.angle) + closest.dy * Math.sin(a.angle));
+        const perpendicularGap = Math.abs(-closest.dx * Math.sin(a.angle) + closest.dy * Math.cos(a.angle));
+        // A short Euclidean endpoint distance alone is not a wall-gap signal:
+        // perpendicular corners and offset parallel strokes are common in plans.
+        // Require a near-collinear continuation and preserve the counterpart ID.
+        if (parallelEnoughForGap
+          && closest.gap > endpointTolerance
+          && closest.gap <= nearEndpointGapMax
+          && alongGap > endpointTolerance
+          && perpendicularGap <= gapAlignmentTolerance) {
+          ea.nearEndpointGapCount += 1;
+          eb.nearEndpointGapCount += 1;
+          ea.nearEndpointGapLineIds.add(b.id);
+          eb.nearEndpointGapLineIds.add(a.id);
         }
       }
     }
@@ -406,6 +427,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       crossJunctionCount: item.crossJunctionCount,
       parallelLineIds: [...item.parallelLineIds].sort(),
       parallelRelationCount: item.parallelLineIds.size,
+      nearEndpointGapLineIds: [...item.nearEndpointGapLineIds].sort(),
       nearEndpointGapCount: item.nearEndpointGapCount,
       interpretation: 'geometric relations are evidence only; no semantic class inferred'
     }};
