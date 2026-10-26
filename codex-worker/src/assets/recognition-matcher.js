@@ -269,7 +269,15 @@ function matchDoorSymbol(candidate = {}, catalog = loadRecognitionAssetCatalog()
   }
 
   const symbol = findSymbolById(catalog, assetId);
-  return buildAssetMatch(symbol, toNumber(candidate.confidence, 0.72), [assetId, hasArc ? 'swing-arc' : '']);
+  const evidence = [assetId];
+  if (hasArc) evidence.push('swing-arc');
+  if (candidate.wallCandidateId) evidence.push(`wall-candidate:${candidate.wallCandidateId}`);
+  if (candidate.gapLength !== undefined && candidate.gapLength !== null && candidate.gapLength !== '') {
+    evidence.push(`opening-gap:${toNumber(candidate.gapLength)}`);
+  }
+  if (candidate.orientation) evidence.push(`orientation:${candidate.orientation}`);
+  if (candidate.source) evidence.push(`source:${candidate.source}`);
+  return buildAssetMatch(symbol, toNumber(candidate.confidence, 0.72), evidence);
 }
 
 function matchWindowSymbol(candidate = {}, catalog = loadRecognitionAssetCatalog()) {
@@ -301,7 +309,19 @@ function matchWindowSymbol(candidate = {}, catalog = loadRecognitionAssetCatalog
   }
 
   const symbol = findSymbolById(catalog, assetId);
-  return buildAssetMatch(symbol, toNumber(candidate.confidence, 0.72), [assetId]);
+  const evidence = [assetId];
+  const wallSupport = candidate.wallSupport && typeof candidate.wallSupport === 'object'
+    ? candidate.wallSupport : null;
+  if (wallSupport?.wallCandidateId) evidence.push(`wall-support:${wallSupport.wallCandidateId}`);
+  if (wallSupport?.distance !== undefined && wallSupport.distance !== null && wallSupport.distance !== '') {
+    evidence.push(`wall-support-distance:${toNumber(wallSupport.distance).toFixed(1)}`);
+  }
+  if (wallSupport?.overlapRatio !== undefined && wallSupport.overlapRatio !== null && wallSupport.overlapRatio !== '') {
+    evidence.push(`wall-support-overlap:${toNumber(wallSupport.overlapRatio).toFixed(3)}`);
+  }
+  if (candidate.orientation) evidence.push(`orientation:${candidate.orientation}`);
+  if (candidate.source) evidence.push(`source:${candidate.source}`);
+  return buildAssetMatch(symbol, toNumber(candidate.confidence, 0.72), evidence);
 }
 
 function matchBalconyCandidate(candidate = {}, catalog = loadRecognitionAssetCatalog()) {
