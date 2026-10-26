@@ -398,6 +398,7 @@ function extractGeometryFeatures(inputLines = [], config = {}) {
         length: Number(line.length.toFixed(2)),
         junctionCount: junctions.length,
         tJunctionCount: junctions.filter(point => point.type === 't-junction').length,
+        cornerJunctionCount: junctions.filter(point => point.type === 'corner').length,
         crossJunctionCount: junctions.filter(point => point.type === 'cross-junction').length,
         parallelRelationCount: parallelRelations.length,
         disconnectedEndpointRelationCount: disconnectedRelations.length,
