@@ -148,6 +148,13 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
   const dark = Number.isFinite(Number(tone.darkRatio))
     ? toNumber(tone.darkRatio, 0)
     : Math.max(0, ...sourceDarkRatios);
+  const geometryEvidence = line.geometryEvidence || {};
+  const topologyEvidence = [];
+  if (toNumber(geometryEvidence.junctionCount) > 0) topologyEvidence.push(`junctions:${toNumber(geometryEvidence.junctionCount)}`);
+  if (toNumber(geometryEvidence.tJunctionCount) > 0) topologyEvidence.push(`T-junctions:${toNumber(geometryEvidence.tJunctionCount)}`);
+  if (toNumber(geometryEvidence.crossJunctionCount) > 0) topologyEvidence.push(`cross-junctions:${toNumber(geometryEvidence.crossJunctionCount)}`);
+  if (toNumber(geometryEvidence.parallelRelationCount) > 0) topologyEvidence.push(`parallel-relations:${toNumber(geometryEvidence.parallelRelationCount)}`);
+  if (toNumber(geometryEvidence.nearEndpointGapCount) > 0) topologyEvidence.push(`near-endpoint-gaps:${toNumber(geometryEvidence.nearEndpointGapCount)}`);
   const appearanceEvidence = [];
   for (const { lineId, appearance } of appearances) {
     const prefix = appearances.length > 1 ? `source:${lineId}:` : '';
@@ -158,7 +165,7 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
     if (Number.isFinite(Number(appearance.darkPixelRatio))) appearanceEvidence.push(`${prefix}dark-pixel-ratio:${toNumber(appearance.darkPixelRatio).toFixed(3)}`);
     if (Number.isFinite(Number(appearance.luminanceP10))) appearanceEvidence.push(`${prefix}luminance-p10:${toNumber(appearance.luminanceP10).toFixed(1)}`);
   }
-  const evidence = (items) => [...items, ...appearanceEvidence];
+  const evidence = (items) => [...items, ...topologyEvidence, ...appearanceEvidence];
 
   const dashed = Boolean(line.dashed || line.lineStyle === 'dashed' || /dash|demolish/i.test(String(line.source || '')));
   if (dashed) {
@@ -319,6 +326,89 @@ function matchStructuralWallVector(vector = {}, catalog = loadRecognitionAssetCa
   return buildAssetMatch(findSymbolById(catalog, 'wall-exterior'), 0.7, ['structural-wall-mask']);
 }
 
+function enrichLineGeometryEvidence(lines = [], options = {}) {
+  const endpointTolerance = toNumber(options.endpointTolerance, 5);
+  const angleTolerance = toNumber(options.angleToleranceDegrees, 4) * Math.PI / 180;
+  const parallelDistanceMax = toNumber(options.parallelDistanceMax, 48);
+  const records = lines.map((line, index) => ({
+    line,
+    id: line.id || `line-${index + 1}`,
+    start: line.start,
+    end: line.end,
+    angle: Math.atan2(toNumber(line.end?.y) - toNumber(line.start?.y), toNumber(line.end?.x) - toNumber(line.start?.x)),
+    length: Math.hypot(toNumber(line.end?.x) - toNumber(line.start?.x), toNumber(line.end?.y) - toNumber(line.start?.y))
+  })).filter((item) => item.start && item.end && item.length > 0);
+  const evidence = new Map(records.map((item) => [item.id, {
+    junctionLineIds: new Set(), tJunctionCount: 0, crossJunctionCount: 0,
+    parallelLineIds: new Set(), nearEndpointGapCount: 0
+  }]));
+  const pointSegmentDistance = (point, segment) => {
+    const ax = toNumber(segment.start.x), ay = toNumber(segment.start.y);
+    const bx = toNumber(segment.end.x), by = toNumber(segment.end.y);
+    const dx = bx - ax, dy = by - ay;
+    const denom = dx * dx + dy * dy;
+    const t = denom ? Math.max(0, Math.min(1, ((point.x - ax) * dx + (point.y - ay) * dy) / denom)) : 0;
+    return Math.hypot(point.x - (ax + t * dx), point.y - (ay + t * dy));
+  };
+  const endpoint = (item, which) => item[which];
+  for (let i = 0; i < records.length; i += 1) {
+    for (let j = i + 1; j < records.length; j += 1) {
+      const a = records[i], b = records[j];
+      const ea = evidence.get(a.id), eb = evidence.get(b.id);
+      const angleDelta = Math.abs(Math.atan2(Math.sin(a.angle - b.angle), Math.cos(a.angle - b.angle)));
+      if (Math.min(angleDelta, Math.PI - angleDelta) <= angleTolerance) {
+        const distanceToLine = Math.min(pointSegmentDistance(a.start, b), pointSegmentDistance(a.end, b),
+          pointSegmentDistance(b.start, a), pointSegmentDistance(b.end, a));
+        if (distanceToLine <= parallelDistanceMax && Math.min(a.length, b.length) >= 20) {
+          ea.parallelLineIds.add(b.id); eb.parallelLineIds.add(a.id);
+        }
+      }
+      const cross = (() => {
+        const x1 = a.start.x, y1 = a.start.y, x2 = a.end.x, y2 = a.end.y;
+        const x3 = b.start.x, y3 = b.start.y, x4 = b.end.x, y4 = b.end.y;
+        const den = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+        if (Math.abs(den) < 1e-8) return null;
+        const t = ((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;
+        const u = -((x1-x2)*(y1-y3)-(y1-y2)*(x1-x3))/den;
+        if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+        return {x:x1+t*(x2-x1), y:y1+t*(y2-y1), t, u};
+      })();
+      if (cross) {
+        ea.junctionLineIds.add(b.id); eb.junctionLineIds.add(a.id);
+        const endpointHit = [cross.t, 1-cross.t, cross.u, 1-cross.u].some((v) => v * Math.min(a.length,b.length) <= endpointTolerance);
+        if (endpointHit) { ea.tJunctionCount += 1; eb.tJunctionCount += 1; }
+        else { ea.crossJunctionCount += 1; eb.crossJunctionCount += 1; }
+      } else {
+        const gap = Math.min(
+          Math.hypot(a.start.x-b.start.x,a.start.y-b.start.y),
+          Math.hypot(a.start.x-b.end.x,a.start.y-b.end.y),
+          Math.hypot(a.end.x-b.start.x,a.end.y-b.start.y),
+          Math.hypot(a.end.x-b.end.x,a.end.y-b.end.y)
+        );
+        if (gap > endpointTolerance && gap <= 16) {
+          ea.nearEndpointGapCount += 1; eb.nearEndpointGapCount += 1;
+        }
+      }
+    }
+  }
+  return lines.map((line, index) => {
+    const id = line.id || `line-${index + 1}`;
+    const item = evidence.get(id);
+    if (!item) return { ...line, geometryEvidence: { available: false } };
+    return { ...line, geometryEvidence: {
+      available: true,
+      junctionLineIds: [...item.junctionLineIds].sort(),
+      junctionCount: item.junctionLineIds.size,
+      tJunctionCount: item.tJunctionCount,
+      crossJunctionCount: item.crossJunctionCount,
+      parallelLineIds: [...item.parallelLineIds].sort(),
+      parallelRelationCount: item.parallelLineIds.size,
+      nearEndpointGapCount: item.nearEndpointGapCount,
+      interpretation: 'geometric relations are evidence only; no semantic class inferred'
+    }};
+  });
+}
+
 function annotateCandidateList(list = [], matcher) {
   return list.map((item) => {
     const assetMatch = matcher(item);
@@ -345,7 +435,7 @@ function annotatePreprocessingWithAssets(preprocessing = {}, catalog = loadRecog
   }
 
   const geometry = preprocessing.geometryCandidates || {};
-  const lines = annotateCandidateList(geometry.lines || [], (line) => matchWallLineCandidate(line, catalog));
+  const geometryEnrichedLines = enrichLineGeometryEvidence(geometry.lines || []);\n  const lines = annotateCandidateList(geometryEnrichedLines, (line) => matchWallLineCandidate(line, catalog));
   const furnitureSymbolCandidates = annotateCandidateList(
     geometry.furnitureSymbolCandidates || [],
     (item) => matchFurnitureSymbol(item, catalog)
@@ -572,7 +662,7 @@ module.exports = {
   buildRecognitionPromptAssetContext,
   shouldExcludeLineFromWalls,
   isAnnotationGeometryLine,
-  matchWallLineCandidate,
+  matchWallLineCandidate,\n  enrichLineGeometryEvidence,
   matchFurnitureSymbol,
   matchMepSymbol,
   matchElectricalSymbol,
