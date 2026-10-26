@@ -120,6 +120,32 @@ assert(topologyMatch.evidence.includes('parallel-relations:1'),
 assert(topologyMatch.evidence.some((item) => item.startsWith('T-junctions:')),
   'wall match evidence should include T-junction topology');
 
+// A small endpoint distance is not enough to call a repairable boundary gap.
+// Only near-collinear, aligned endpoint pairs should become gap evidence.
+const alignedGap = enrichLineGeometryEvidence([
+  { id: 'gap-left', start: { x: 0, y: 0 }, end: { x: 40, y: 0 } },
+  { id: 'gap-right', start: { x: 48, y: 1 }, end: { x: 90, y: 1 } }
+]);
+const alignedGapEvidence = alignedGap.find((line) => line.id === 'gap-left').geometryEvidence;
+assert.strictEqual(alignedGapEvidence.nearEndpointGapCount, 1,
+  'near-collinear endpoints with a short aligned gap should be recorded');
+assert.deepStrictEqual(alignedGapEvidence.nearEndpointGapLineIds, ['gap-right'],
+  'gap evidence should retain the counterpart line ID for traceability');
+
+const perpendicularNearMiss = enrichLineGeometryEvidence([
+  { id: 'horizontal-near-miss', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'vertical-near-miss', start: { x: 105, y: 5 }, end: { x: 105, y: 50 } }
+]);
+assert.strictEqual(perpendicularNearMiss.find((line) => line.id === 'horizontal-near-miss').geometryEvidence.nearEndpointGapCount, 0,
+  'a nearby perpendicular corner must not be interpreted as a wall continuation gap');
+
+const offsetParallel = enrichLineGeometryEvidence([
+  { id: 'offset-left', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'offset-right', start: { x: 105, y: 10 }, end: { x: 150, y: 10 } }
+]);
+assert.strictEqual(offsetParallel.find((line) => line.id === 'offset-left').geometryEvidence.nearEndpointGapCount, 0,
+  'parallel strokes with a large lateral offset must not be interpreted as a collinear gap');
+
 // Original-pixel appearance must flow into candidate matching as supporting
 // evidence, without allowing color alone to label a line as a wall.
 const appearanceMatch = matchWallLineCandidate({
