@@ -224,6 +224,27 @@ assert(wallSupportedRoomAssociation.metrics.openingAssociationRatio === 1,
 assert(wallSupportedRoomAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-supported'),
   'The spatial graph must use the same wall-supported room association as validation');
 
+const supportedWallGapAssociation = validateFloorplanDraft({
+  rooms: [{ id: 'room-gap-supported', name: '门厅', type: 'entry', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-gap-supported', start: { x: 0, y: 125 }, end: { x: 100, y: 125 }, thickness: 8 }],
+  doors: [{
+    id: 'door-in-supported-gap', x: 92, y: 120, width: 86, height: 10,
+    attachedWallId: 'wall-gap-supported',
+    sourceEvidence: {
+      attachedWallId: 'wall-gap-supported',
+      inferredFrom: 'wall-gap-between-supported-wall-runs',
+      gapLength: 86,
+      nearWallEndpoint: true,
+      withinWallSpan: true,
+      withinAttachmentSpan: true
+    }
+  }]
+});
+assert(!supportedWallGapAssociation.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A documented door gap may extend beyond one wall-run endpoint when its axis and gap length support the relation');
+assert(supportedWallGapAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-gap-supported'),
+  'Documented wall-gap doors must produce the same room connection in the spatial graph');
+
 const wallEndpointNearMiss = validateFloorplanDraft({
   rooms: [{ id: 'room-near-miss', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [{ id: 'exterior-wall', start: { x: 125, y: 0 }, end: { x: 125, y: 100 }, thickness: 8 }],
