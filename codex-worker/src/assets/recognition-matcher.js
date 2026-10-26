@@ -376,7 +376,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
     length: Math.hypot(toNumber(line.end?.x) - toNumber(line.start?.x), toNumber(line.end?.y) - toNumber(line.start?.y))
   })).filter((item) => item.start && item.end && item.length > 0);
   const evidence = new Map(records.map((item) => [item.id, {
-    junctionLineIds: new Set(), tJunctionCount: 0, endpointJunctionCount: 0, crossJunctionCount: 0,
+    junctionLineIds: new Set(), tJunctionCount: 0, endpointJunctionCount: 0, cornerJunctionCount: 0, crossJunctionCount: 0,
     parallelLineIds: new Set(), nearEndpointGapLineIds: new Set(), nearEndpointGapCount: 0,
     nearTJunctionLineIds: new Set(), nearTJunctionCount: 0
   }]));
@@ -423,8 +423,13 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
         const aEndpointHit = Math.min(cross.t, 1 - cross.t) * a.length <= endpointTolerance;
         const bEndpointHit = Math.min(cross.u, 1 - cross.u) * b.length <= endpointTolerance;
         if (aEndpointHit && bEndpointHit) {
-          // Two segment endpoints meeting is a corner/endpoint junction, not a T.
+          // Keep endpoint contact distinct from a true turn: collinear segments
+          // can meet at endpoints too, while a corner requires non-parallel rays.
           ea.endpointJunctionCount += 1; eb.endpointJunctionCount += 1;
+          const foldedAngle = Math.min(angleDelta, Math.PI - angleDelta);
+          if (foldedAngle >= junctionAngleMinDegrees * Math.PI / 180) {
+            ea.cornerJunctionCount += 1; eb.cornerJunctionCount += 1;
+          }
         } else if (aEndpointHit || bEndpointHit) {
           ea.tJunctionCount += 1; eb.tJunctionCount += 1;
         } else {
@@ -490,6 +495,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       junctionCount: item.junctionLineIds.size,
       tJunctionCount: item.tJunctionCount,
       endpointJunctionCount: item.endpointJunctionCount,
+      cornerJunctionCount: item.cornerJunctionCount,
       crossJunctionCount: item.crossJunctionCount,
       parallelLineIds: [...item.parallelLineIds].sort(),
       parallelRelationCount: item.parallelLineIds.size,
