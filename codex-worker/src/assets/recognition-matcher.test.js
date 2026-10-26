@@ -1,6 +1,7 @@
 const assert = require('assert');
 const {
   buildRecognitionPromptAssetContext,
+  enrichLineGeometryEvidence,
   loadRecognitionAssetCatalog,
   matchWallLineCandidate
 } = require('../assets/recognition-matcher');
