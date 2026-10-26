@@ -342,7 +342,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
     length: Math.hypot(toNumber(line.end?.x) - toNumber(line.start?.x), toNumber(line.end?.y) - toNumber(line.start?.y))
   })).filter((item) => item.start && item.end && item.length > 0);
   const evidence = new Map(records.map((item) => [item.id, {
-    junctionLineIds: new Set(), tJunctionCount: 0, crossJunctionCount: 0,
+    junctionLineIds: new Set(), tJunctionCount: 0, endpointJunctionCount: 0, crossJunctionCount: 0,
     parallelLineIds: new Set(), nearEndpointGapLineIds: new Set(), nearEndpointGapCount: 0
   }]));
   const pointSegmentDistance = (point, segment) => {
@@ -378,12 +378,16 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       })();
       if (cross) {
         ea.junctionLineIds.add(b.id); eb.junctionLineIds.add(a.id);
-        const endpointHit = cross.t * a.length <= endpointTolerance
-          || (1 - cross.t) * a.length <= endpointTolerance
-          || cross.u * b.length <= endpointTolerance
-          || (1 - cross.u) * b.length <= endpointTolerance;
-        if (endpointHit) { ea.tJunctionCount += 1; eb.tJunctionCount += 1; }
-        else { ea.crossJunctionCount += 1; eb.crossJunctionCount += 1; }
+        const aEndpointHit = Math.min(cross.t, 1 - cross.t) * a.length <= endpointTolerance;
+        const bEndpointHit = Math.min(cross.u, 1 - cross.u) * b.length <= endpointTolerance;
+        if (aEndpointHit && bEndpointHit) {
+          // Two segment endpoints meeting is a corner/endpoint junction, not a T.
+          ea.endpointJunctionCount += 1; eb.endpointJunctionCount += 1;
+        } else if (aEndpointHit || bEndpointHit) {
+          ea.tJunctionCount += 1; eb.tJunctionCount += 1;
+        } else {
+          ea.crossJunctionCount += 1; eb.crossJunctionCount += 1;
+        }
       } else {
         const endpointPairs = [
           { first: a.start, second: b.start },
@@ -424,6 +428,7 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       junctionLineIds: [...item.junctionLineIds].sort(),
       junctionCount: item.junctionLineIds.size,
       tJunctionCount: item.tJunctionCount,
+      endpointJunctionCount: item.endpointJunctionCount,
       crossJunctionCount: item.crossJunctionCount,
       parallelLineIds: [...item.parallelLineIds].sort(),
       parallelRelationCount: item.parallelLineIds.size,
