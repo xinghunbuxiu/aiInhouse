@@ -719,6 +719,7 @@ function buildRecognitionPromptAssetContext(catalog = loadRecognitionAssetCatalo
 }
 
 module.exports = {
+  loadRecognitionAssetCatalog,
   annotatePreprocessingWithAssets,
   applyAssetWallRoles,
   buildRecognitionPromptAssetContext,
