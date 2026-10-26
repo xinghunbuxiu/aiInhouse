@@ -113,11 +113,11 @@ assert(nearTWallEvidence.nearTJunctionLineIds.includes('near-t-branch'),
   'near-T evidence must preserve the counterpart line ID for traceability');
 assert(nearTBranchEvidence.nearTJunctionLineIds.includes('near-t-wall'),
   'near-T counterpart IDs must be symmetric');
-const offsetParallel = enrichLineGeometryEvidence([
+const nearTParallelLines = enrichLineGeometryEvidence([
   { id: 'parallel-base', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
   { id: 'parallel-offset', start: { x: 50, y: 6 }, end: { x: 80, y: 6 } }
 ]);
-assert.strictEqual(offsetParallel.find((line) => line.id === 'parallel-base').geometryEvidence.nearTJunctionCount, 0,
+assert.strictEqual(nearTParallelLines.find((line) => line.id === 'parallel-base').geometryEvidence.nearTJunctionCount, 0,
   'a nearby parallel stroke must not be mislabeled as a near-T junction');
 const unequalLengthJunction = enrichLineGeometryEvidence([
   { id: 'long-horizontal', start: { x: 0, y: 0 }, end: { x: 1000, y: 0 } },
