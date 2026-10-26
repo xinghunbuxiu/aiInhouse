@@ -3,7 +3,9 @@ const {
   buildRecognitionPromptAssetContext,
   enrichLineGeometryEvidence,
   loadRecognitionAssetCatalog,
-  matchWallLineCandidate
+  matchWallLineCandidate,
+  matchDoorSymbol,
+  matchWindowSymbol
 } = require('../assets/recognition-matcher');
 
 const catalog = loadRecognitionAssetCatalog();
@@ -242,5 +244,31 @@ assert(mergedAppearanceMatch.evidence.includes('source:original-b:mean-luminance
   'merged match should preserve second source appearance and provenance');
 assert(mergedAppearanceMatch.evidence.includes('source:original-b:dark-pixel-ratio:0.680'),
   'merged match should retain per-source dark-pixel measurements');
+
+const doorMatch = matchDoorSymbol({
+  type: 'door', doorType: 'single_swing', hasSwingArc: true,
+  width: 40, height: 20, gapLength: 40, orientation: 'horizontal',
+  wallCandidateId: 'wall-gap-12', source: 'wall-gap-door-scanner'
+}, catalog);
+assert(doorMatch.evidence.includes('wall-candidate:wall-gap-12'),
+  'door semantic matching must preserve the wall candidate that the door scanner associated with the opening');
+assert(doorMatch.evidence.includes('opening-gap:40'),
+  'door semantic matching must retain the measured opening gap for downstream geometry checks');
+assert(doorMatch.evidence.includes('source:wall-gap-door-scanner'),
+  'door match evidence must retain scanner provenance');
+
+const windowMatch = matchWindowSymbol({
+  type: 'window', windowType: 'sliding', width: 80, height: 16,
+  orientation: 'horizontal', source: 'parallel-thin-window-symbol-scanner',
+  wallSupport: { wallCandidateId: 'wall-outer-4', distance: 3.5, overlapRatio: 0.82, score: 1.12 }
+}, catalog);
+assert(windowMatch.evidence.includes('wall-support:wall-outer-4'),
+  'window semantic matching must preserve the supporting wall candidate ID');
+assert(windowMatch.evidence.includes('wall-support-distance:3.5'),
+  'window semantic matching must retain measured distance to its supporting wall');
+assert(windowMatch.evidence.includes('wall-support-overlap:0.820'),
+  'window semantic matching must retain the overlap ratio used to associate it with a wall');
+assert(windowMatch.evidence.includes('source:parallel-thin-window-symbol-scanner'),
+  'window match evidence must retain scanner provenance');
 
 console.log(`Recognition asset prompt tests passed: ${catalog.symbols.length} catalog symbols; ${context.symbolSamples.length} prompt samples across ${represented.size} categories.`);
