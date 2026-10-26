@@ -435,7 +435,8 @@ function annotatePreprocessingWithAssets(preprocessing = {}, catalog = loadRecog
   }
 
   const geometry = preprocessing.geometryCandidates || {};
-  const geometryEnrichedLines = enrichLineGeometryEvidence(geometry.lines || []);\n  const lines = annotateCandidateList(geometryEnrichedLines, (line) => matchWallLineCandidate(line, catalog));
+  const geometryEnrichedLines = enrichLineGeometryEvidence(geometry.lines || []);
+  const lines = annotateCandidateList(geometryEnrichedLines, (line) => matchWallLineCandidate(line, catalog));
   const furnitureSymbolCandidates = annotateCandidateList(
     geometry.furnitureSymbolCandidates || [],
     (item) => matchFurnitureSymbol(item, catalog)
