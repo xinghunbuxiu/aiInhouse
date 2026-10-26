@@ -276,6 +276,15 @@ function matchDoorSymbol(candidate = {}, catalog = loadRecognitionAssetCatalog()
   if (candidate.gapLength !== undefined && candidate.gapLength !== null && candidate.gapLength !== '') {
     evidence.push(`opening-gap:${toNumber(candidate.gapLength)}`);
   }
+  if (candidate.leftSupport !== undefined && candidate.leftSupport !== null && candidate.leftSupport !== '') {
+    evidence.push(`wall-support-left:${toNumber(candidate.leftSupport).toFixed(3)}`);
+  }
+  if (candidate.rightSupport !== undefined && candidate.rightSupport !== null && candidate.rightSupport !== '') {
+    evidence.push(`wall-support-right:${toNumber(candidate.rightSupport).toFixed(3)}`);
+  }
+  if (candidate.leafLine?.arcEdgeDensity !== undefined && candidate.leafLine.arcEdgeDensity !== null) {
+    evidence.push(`swing-arc-density:${toNumber(candidate.leafLine.arcEdgeDensity).toFixed(4)}`);
+  }
   if (candidate.orientation) evidence.push(`orientation:${candidate.orientation}`);
   if (candidate.source) evidence.push(`source:${candidate.source}`);
   return buildAssetMatch(symbol, toNumber(candidate.confidence, 0.72), evidence);
