@@ -52,11 +52,36 @@ function openingRoomTolerance(opening = {}) {
   return Math.max(8, Math.min(24, span * 0.35));
 }
 
-function roomsNearOpening(opening, rooms = []) {
+function roomsNearOpening(opening, rooms = [], walls = []) {
   const p = openingPoint(opening);
   if (!point(p)) return [];
   const tolerance = openingRoomTolerance(opening);
-  return rooms.filter(room => pointInRoom(p, room, tolerance));
+  const directlyAssociated = rooms.filter(room => pointInRoom(p, room, tolerance));
+  if (directlyAssociated.length) return directlyAssociated;
+
+  // Exterior openings may sit outside the detected room-interior rectangle
+  // because the rectangle excludes the wall band or a bay-window projection.
+  // Permit a bounded fallback only when the same opening has a real wall
+  // reference, agrees with that wall's measured segment, and is near one room.
+  if (!Array.isArray(walls) || !walls.length || opening.needsWallAttachmentReview) return [];
+  const sourceEvidence = opening.sourceEvidence || {};
+  const attachedWallId = opening.attachedWallId || sourceEvidence.attachedWallId;
+  if (!attachedWallId || sourceEvidence.withinWallSpan === false
+    || sourceEvidence.withinAttachmentSpan === false) return [];
+  const wall = walls.find((item, index) =>
+    String(item.id || `wall-${index + 1}`) === String(attachedWallId));
+  if (!wall) return [];
+  const wallEvidence = pointToSegmentEvidence(p, wall);
+  const wallTolerance = Math.max(8, Number(wall.thickness) || 0);
+  if (!wallEvidence || wallEvidence.distance > wallTolerance || !wallEvidence.withinSegmentSpan) return [];
+
+  const nearest = nearestRoomEvidence(opening, rooms);
+  const span = Math.max(Number(opening.width) || 0, Number(opening.height) || 0);
+  const supportedRoomTolerance = Math.max(tolerance, span * 0.8);
+  if (!nearest || nearest.distanceToBounds > supportedRoomTolerance) return [];
+  const associatedRoom = rooms.find((room, index) =>
+    String(room.id || `room-${index + 1}`) === nearest.roomId);
+  return associatedRoom ? [associatedRoom] : [];
 }
 
 function nearestRoomEvidence(opening, rooms = []) {
@@ -174,11 +199,8 @@ function buildSpatialGraph(draft = {}) {
     }
   }
   return { nodes, edges, doorConnections: doors.map((door, index) => {
-    const p = openingPoint(door);
-    const connected = rooms
-      .map((room, roomIndex) => ({ room, node: nodes[roomIndex] }))
-      .filter(({ room }) => roomsNearOpening(door, [room]).length > 0)
-      .map(({ node }) => node.id);
+    const connected = roomsNearOpening(door, rooms, walls)
+      .map((room, roomIndex) => String(room.id || `room-${rooms.indexOf(room) + 1 || roomIndex + 1}`));
     return { id: String(door.id || `door-${index + 1}`), connectedRoomIds: connected };
   }) };
 }
@@ -228,7 +250,7 @@ function validateFloorplanDraft(draft = {}) {
         || (opening.height !== undefined && (!finite(opening.height) || Number(opening.height) <= 0))) {
         issues.push({ code: `invalid-${kind}-dimensions`, severity: 'review', entityId: id });
       }
-      const roomsContainingOpening = roomsNearOpening(opening, rooms);
+      const roomsContainingOpening = roomsNearOpening(opening, rooms, walls);
       if (roomsContainingOpening.length === 0) {
         // Keep the room-association failure, but expose nearest-wall geometry
         // so reviewers can distinguish a wall-end/topology issue from a symbol
@@ -279,7 +301,7 @@ function validateFloorplanDraft(draft = {}) {
   const openings = [...doors, ...windows];
   const associatedOpeningCount = openings.filter(opening => {
     const p = openingPoint(opening);
-    return point(p) && roomsNearOpening(opening, rooms).length > 0;
+    return point(p) && roomsNearOpening(opening, rooms, walls).length > 0;
   }).length;
   const wallIdsForAttachment = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
   let wallAttachedOpeningCount = 0;
