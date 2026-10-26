@@ -146,12 +146,24 @@ assert.strictEqual(cornerJunction.find((line) => line.id === 'corner-horizontal'
   'two endpoints meeting at a corner must not be mislabeled as a T-junction');
 assert.strictEqual(cornerJunction.find((line) => line.id === 'corner-horizontal').geometryEvidence.endpointJunctionCount, 1,
   'corner endpoint relations should remain available as distinct evidence');
+assert.strictEqual(cornerJunction.find((line) => line.id === 'corner-horizontal').geometryEvidence.cornerJunctionCount, 1,
+  'perpendicular endpoint contacts should be identified as corners, not only generic endpoint contacts');
+const collinearEndpointContact = enrichLineGeometryEvidence([
+  { id: 'collinear-left', start: { x: 0, y: 0 }, end: { x: 50, y: 0 } },
+  { id: 'collinear-right', start: { x: 50, y: 0 }, end: { x: 100, y: 0 } }
+]);
+assert.strictEqual(collinearEndpointContact.find((line) => line.id === 'collinear-left').geometryEvidence.endpointJunctionCount, 1,
+  'collinear touching segments should retain endpoint connectivity');
+assert.strictEqual(collinearEndpointContact.find((line) => line.id === 'collinear-left').geometryEvidence.cornerJunctionCount, 0,
+  'collinear touching segments must not be mistaken for a geometric corner');
 const cornerMatch = matchWallLineCandidate({
   id: 'corner-horizontal', source: 'morphology-wall-band', thickness: 11,
   geometryEvidence: cornerJunction.find((line) => line.id === 'corner-horizontal').geometryEvidence
 }, catalog);
 assert(cornerMatch.evidence.includes('endpoint-junctions:1'),
   'corner endpoint topology must remain traceable through semantic asset matching');
+assert(cornerMatch.evidence.includes('corner-junctions:1'),
+  'corner topology must remain separately traceable through semantic asset matching');
 assert.strictEqual(topologyLines.find((line) => line.id === 'isolated').geometryEvidence.junctionCount, 0,
   'isolated geometry must not inherit unrelated junction evidence');
 const topologyMatch = matchWallLineCandidate({
