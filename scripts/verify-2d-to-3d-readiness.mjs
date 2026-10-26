@@ -219,7 +219,7 @@ const wallSupportedRoomAssociation = validateFloorplanDraft({
 });
 assert(!wallSupportedRoomAssociation.issues.some(issue => issue.code === 'door-not-associated-with-room'),
   'A nearby room may be associated when the opening has a valid attached-wall reference and lies on that wall');
-assert.strictEqual(wallSupportedRoomAssociation.metrics.openingAssociationRatio, 1,
+assert(wallSupportedRoomAssociation.metrics.openingAssociationRatio === 1,
   'Wall-supported room association must be reflected in the opening association metric');
 assert(wallSupportedRoomAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-supported'),
   'The spatial graph must use the same wall-supported room association as validation');
