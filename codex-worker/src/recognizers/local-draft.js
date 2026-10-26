@@ -2438,6 +2438,13 @@ function inferDoorsFromSymbolCandidates(preprocessing = {}) {
           rightSupport: candidate.rightSupport,
           doorType: candidate.doorType || '',
           hasSwingArc: Boolean(candidate.hasSwingArc),
+          swingEvidence: candidate.leafLine ? {
+            orientation: candidate.leafLine.orientation || '',
+            length: candidate.leafLine.length,
+            hinge: candidate.leafLine.hinge || null,
+            arcEdgeDensity: candidate.leafLine.arcEdgeDensity
+          } : null,
+          openingGapEvidence: candidate.openingGapEvidence || null,
           assetMatch,
           confirmedOpening: assetMatched || hasWall || toNumber(candidate.confidence, 0) >= 0.7,
           inferredFrom: 'wall-gap-between-supported-wall-runs'
