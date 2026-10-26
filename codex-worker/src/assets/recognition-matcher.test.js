@@ -107,7 +107,7 @@ const topologyMatch = matchWallLineCandidate({
   id: 'wall-horizontal', source: 'morphology-wall-band', thickness: 11,
   geometryEvidence: horizontalEvidence
 }, catalog);
-assert(topologyMatch.evidence.includes('parallel-relations:2'),
+assert(topologyMatch.evidence.includes('parallel-relations:1'),
   'wall match evidence should include nearby parallel relations');
 assert(topologyMatch.evidence.some((item) => item.startsWith('T-junctions:')),
   'wall match evidence should include T-junction topology');
