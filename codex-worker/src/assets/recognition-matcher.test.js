@@ -101,6 +101,14 @@ assert(horizontalEvidence.junctionLineIds.includes('partition-t'),
   'T-junction relation should be retained for matching');
 assert(horizontalEvidence.tJunctionCount > 0,
   'endpoint-to-segment connection should be recorded as a T-junction');
+const unequalLengthJunction = enrichLineGeometryEvidence([
+  { id: 'long-horizontal', start: { x: 0, y: 0 }, end: { x: 1000, y: 0 } },
+  { id: 'short-vertical', start: { x: 500, y: 0 }, end: { x: 500, y: 10 } }
+]);
+assert.strictEqual(unequalLengthJunction.find((line) => line.id === 'long-horizontal').geometryEvidence.tJunctionCount, 1,
+  'a short branch endpoint on a long segment should be classified as a T-junction using each segment own length');
+assert.strictEqual(unequalLengthJunction.find((line) => line.id === 'short-vertical').geometryEvidence.tJunctionCount, 1,
+  'junction classification should be symmetric when segment lengths differ');
 assert.strictEqual(topologyLines.find((line) => line.id === 'isolated').geometryEvidence.junctionCount, 0,
   'isolated geometry must not inherit unrelated junction evidence');
 const topologyMatch = matchWallLineCandidate({
