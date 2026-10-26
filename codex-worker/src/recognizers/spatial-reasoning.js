@@ -200,7 +200,7 @@ function buildSpatialGraph(draft = {}) {
   }
   return { nodes, edges, doorConnections: doors.map((door, index) => {
     const connected = roomsNearOpening(door, rooms, walls)
-      .map((room, roomIndex) => String(room.id || `room-${rooms.indexOf(room) + 1 || roomIndex + 1}`));
+      .map((room, roomIndex) => String(room.id || `room-${roomIndex + 1}`));
     return { id: String(door.id || `door-${index + 1}`), connectedRoomIds: connected };
   }) };
 }
