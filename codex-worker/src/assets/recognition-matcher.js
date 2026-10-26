@@ -448,6 +448,13 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
           dy: toNumber(pair.second.y) - toNumber(pair.first.y)
         })).map((pair) => ({ ...pair, gap: Math.hypot(pair.dx, pair.dy) }));
         const closest = endpointPairs.reduce((best, pair) => pair.gap < best.gap ? pair : best);
+        // Parallel collinear segments can meet at a shared endpoint without a
+        // finite line intersection. Preserve that connectivity, but do not call
+        // it a corner: the folded angle is effectively zero.
+        if (closest.gap <= endpointTolerance) {
+          ea.endpointJunctionCount += 1;
+          eb.endpointJunctionCount += 1;
+        }
         const parallelEnoughForGap = Math.min(angleDelta, Math.PI - angleDelta) <= gapAngleTolerance;
         const alongGap = Math.abs(closest.dx * Math.cos(a.angle) + closest.dy * Math.sin(a.angle));
         const perpendicularGap = Math.abs(-closest.dx * Math.sin(a.angle) + closest.dy * Math.cos(a.angle));
