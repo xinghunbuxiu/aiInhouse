@@ -45,6 +45,15 @@ assert(cross.intersections.some(item => Math.abs(item.point.x - 20) < 0.01 && Ma
 assert(cross.points.some(point => point.type === 'cross-junction' && point.degree === 4),
   'a full horizontal/vertical crossing must expose four rays');
 
+const cornerFeature = extractGeometryFeatures([
+  { id: 'corner-h', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'corner-v', source: 'wall-band', start: { x: 0, y: 0 }, end: { x: 0, y: 100 } }
+], { snapTolerance: 1 });
+assert(cornerFeature.points.some(point => point.type === 'corner' && point.degree === 2),
+  'two perpendicular rays meeting at an endpoint must be retained as a corner feature');
+assert.equal(cornerFeature.lineEvidence.find(line => line.lineId === 'corner-h').geometry.cornerJunctionCount, 1,
+  'per-line evidence must report corner junctions separately from T/cross junctions');
+
 const merged = mergeCollinearSegments([
   { id: 'wall-a', source: 'wall-band', start: { x: 0, y: 10 }, end: { x: 40, y: 10 } },
   { id: 'wall-b', source: 'wall-band', start: { x: 43, y: 11 }, end: { x: 80, y: 10 } },
