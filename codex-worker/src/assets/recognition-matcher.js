@@ -156,6 +156,13 @@ function matchWallLineCandidate(line = {}, catalog = loadRecognitionAssetCatalog
   if (toNumber(geometryEvidence.crossJunctionCount) > 0) topologyEvidence.push(`cross-junctions:${toNumber(geometryEvidence.crossJunctionCount)}`);
   if (toNumber(geometryEvidence.parallelRelationCount) > 0) topologyEvidence.push(`parallel-relations:${toNumber(geometryEvidence.parallelRelationCount)}`);
   if (toNumber(geometryEvidence.nearEndpointGapCount) > 0) topologyEvidence.push(`near-endpoint-gaps:${toNumber(geometryEvidence.nearEndpointGapCount)}`);
+  if (toNumber(geometryEvidence.nearTJunctionCount) > 0) {
+    topologyEvidence.push(`near-T-junctions:${toNumber(geometryEvidence.nearTJunctionCount)}`);
+    const nearTLineIds = Array.isArray(geometryEvidence.nearTJunctionLineIds)
+      ? geometryEvidence.nearTJunctionLineIds.filter(Boolean).sort()
+      : [];
+    if (nearTLineIds.length) topologyEvidence.push(`near-T-lines:${nearTLineIds.join(',')}`);
+  }
   const appearanceEvidence = [];
   for (const { lineId, appearance } of appearances) {
     const prefix = appearances.length > 1 ? `source:${lineId}:` : '';
