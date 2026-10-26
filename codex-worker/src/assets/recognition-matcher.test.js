@@ -101,6 +101,24 @@ assert(horizontalEvidence.junctionLineIds.includes('partition-t'),
   'T-junction relation should be retained for matching');
 assert(horizontalEvidence.tJunctionCount > 0,
   'endpoint-to-segment connection should be recorded as a T-junction');
+const nearTGap = enrichLineGeometryEvidence([
+  { id: 'near-t-wall', start: { x: 10, y: 50 }, end: { x: 110, y: 50 } },
+  { id: 'near-t-branch', start: { x: 55, y: 56 }, end: { x: 55, y: 90 } }
+]);
+const nearTWallEvidence = nearTGap.find((line) => line.id === 'near-t-wall').geometryEvidence;
+const nearTBranchEvidence = nearTGap.find((line) => line.id === 'near-t-branch').geometryEvidence;
+assert.strictEqual(nearTWallEvidence.nearTJunctionCount, 1,
+  'a branch endpoint within the configured gap tolerance of a segment interior should be retained as near-T evidence');
+assert(nearTWallEvidence.nearTJunctionLineIds.includes('near-t-branch'),
+  'near-T evidence must preserve the counterpart line ID for traceability');
+assert(nearTBranchEvidence.nearTJunctionLineIds.includes('near-t-wall'),
+  'near-T counterpart IDs must be symmetric');
+const offsetParallel = enrichLineGeometryEvidence([
+  { id: 'parallel-base', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+  { id: 'parallel-offset', start: { x: 50, y: 6 }, end: { x: 80, y: 6 } }
+]);
+assert.strictEqual(offsetParallel.find((line) => line.id === 'parallel-base').geometryEvidence.nearTJunctionCount, 0,
+  'a nearby parallel stroke must not be mislabeled as a near-T junction');
 const unequalLengthJunction = enrichLineGeometryEvidence([
   { id: 'long-horizontal', start: { x: 0, y: 0 }, end: { x: 1000, y: 0 } },
   { id: 'short-vertical', start: { x: 500, y: 0 }, end: { x: 500, y: 10 } }
