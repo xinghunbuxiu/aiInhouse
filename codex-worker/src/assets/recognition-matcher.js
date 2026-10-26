@@ -332,6 +332,8 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
   const gapAngleTolerance = toNumber(options.gapAngleToleranceDegrees, 12) * Math.PI / 180;
   const gapAlignmentTolerance = toNumber(options.gapAlignmentTolerance, endpointTolerance);
   const nearEndpointGapMax = toNumber(options.nearEndpointGapMax, 16);
+  const junctionGapTolerance = toNumber(options.junctionGapTolerance, 8);
+  const junctionAngleMinDegrees = toNumber(options.junctionAngleMinDegrees, 20);
   const parallelDistanceMax = toNumber(options.parallelDistanceMax, 48);
   const records = lines.map((line, index) => ({
     line,
@@ -343,16 +345,24 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
   })).filter((item) => item.start && item.end && item.length > 0);
   const evidence = new Map(records.map((item) => [item.id, {
     junctionLineIds: new Set(), tJunctionCount: 0, endpointJunctionCount: 0, crossJunctionCount: 0,
-    parallelLineIds: new Set(), nearEndpointGapLineIds: new Set(), nearEndpointGapCount: 0
+    parallelLineIds: new Set(), nearEndpointGapLineIds: new Set(), nearEndpointGapCount: 0,
+    nearTJunctionLineIds: new Set(), nearTJunctionCount: 0
   }]));
-  const pointSegmentDistance = (point, segment) => {
+  const projectPointToSegment = (point, segment) => {
     const ax = toNumber(segment.start.x), ay = toNumber(segment.start.y);
     const bx = toNumber(segment.end.x), by = toNumber(segment.end.y);
+    const px = toNumber(point.x), py = toNumber(point.y);
     const dx = bx - ax, dy = by - ay;
     const denom = dx * dx + dy * dy;
-    const t = denom ? Math.max(0, Math.min(1, ((point.x - ax) * dx + (point.y - ay) * dy) / denom)) : 0;
-    return Math.hypot(point.x - (ax + t * dx), point.y - (ay + t * dy));
+    const rawT = denom ? ((px - ax) * dx + (py - ay) * dy) / denom : 0;
+    const t = Math.max(0, Math.min(1, rawT));
+    return {
+      t: rawT,
+      distanceAlong: rawT * Math.sqrt(denom),
+      distance: Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+    };
   };
+  const pointSegmentDistance = (point, segment) => projectPointToSegment(point, segment).distance;
   const endpoint = (item, which) => item[which];
   for (let i = 0; i < records.length; i += 1) {
     for (let j = i + 1; j < records.length; j += 1) {
@@ -416,6 +426,25 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
           ea.nearEndpointGapLineIds.add(b.id);
           eb.nearEndpointGapLineIds.add(a.id);
         }
+        // Also retain a near-T relation when a branch endpoint nearly reaches
+        // the interior of another segment. Do not promote parallel strokes or
+        // endpoint-to-endpoint corners to this relation.
+        const foldedAngle = Math.min(angleDelta, Math.PI - angleDelta);
+        const sufficientlyNonParallel = foldedAngle >= junctionAngleMinDegrees * Math.PI / 180;
+        const endpointNearInterior = (branch, target) => [branch.start, branch.end].some((point) => {
+          const projection = projectPointToSegment(point, target);
+          return projection.t >= 0 && projection.t <= 1
+            && projection.distanceAlong > endpointTolerance
+            && projection.distanceAlong < target.length - endpointTolerance
+            && projection.distance <= junctionGapTolerance;
+        });
+        if (sufficientlyNonParallel
+          && (endpointNearInterior(a, b) || endpointNearInterior(b, a))) {
+          ea.nearTJunctionCount += 1;
+          eb.nearTJunctionCount += 1;
+          ea.nearTJunctionLineIds.add(b.id);
+          eb.nearTJunctionLineIds.add(a.id);
+        }
       }
     }
   }
@@ -434,6 +463,8 @@ function enrichLineGeometryEvidence(lines = [], options = {}) {
       parallelRelationCount: item.parallelLineIds.size,
       nearEndpointGapLineIds: [...item.nearEndpointGapLineIds].sort(),
       nearEndpointGapCount: item.nearEndpointGapCount,
+      nearTJunctionLineIds: [...item.nearTJunctionLineIds].sort(),
+      nearTJunctionCount: item.nearTJunctionCount,
       interpretation: 'geometric relations are evidence only; no semantic class inferred'
     }};
   });
