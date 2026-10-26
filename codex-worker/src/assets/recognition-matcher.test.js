@@ -172,6 +172,12 @@ assert.strictEqual(alignedGapEvidence.nearEndpointGapCount, 1,
   'near-collinear endpoints with a short aligned gap should be recorded');
 assert.deepStrictEqual(alignedGapEvidence.nearEndpointGapLineIds, ['gap-right'],
   'gap evidence should retain the counterpart line ID for traceability');
+const alignedGapMatch = matchWallLineCandidate({
+  id: 'gap-left', source: 'morphology-wall-band', thickness: 11,
+  geometryEvidence: alignedGapEvidence
+}, catalog);
+assert(alignedGapMatch.evidence.includes('near-endpoint-gap-lines:gap-right'),
+  'semantic wall evidence must preserve the exact counterpart ID so downstream opening reasoning can inspect the gap');
 
 const perpendicularNearMiss = enrichLineGeometryEvidence([
   { id: 'horizontal-near-miss', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
