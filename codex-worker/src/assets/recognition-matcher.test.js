@@ -260,12 +260,20 @@ assert(mergedAppearanceMatch.evidence.includes('source:original-b:dark-pixel-rat
 const doorMatch = matchDoorSymbol({
   type: 'door', doorType: 'single_swing', hasSwingArc: true,
   width: 40, height: 20, gapLength: 40, orientation: 'horizontal',
-  wallCandidateId: 'wall-gap-12', source: 'wall-gap-door-scanner'
+  wallCandidateId: 'wall-gap-12', source: 'wall-gap-door-scanner',
+  leftSupport: 0.72, rightSupport: 0.68,
+  leafLine: { arcEdgeDensity: 0.024 }
 }, catalog);
 assert(doorMatch.evidence.includes('wall-candidate:wall-gap-12'),
   'door semantic matching must preserve the wall candidate that the door scanner associated with the opening');
 assert(doorMatch.evidence.includes('opening-gap:40'),
   'door semantic matching must retain the measured opening gap for downstream geometry checks');
+assert(doorMatch.evidence.includes('wall-support-left:0.720'),
+  'door semantic matching must retain the measured left wall support ratio');
+assert(doorMatch.evidence.includes('wall-support-right:0.680'),
+  'door semantic matching must retain the measured right wall support ratio');
+assert(doorMatch.evidence.includes('swing-arc-density:0.0240'),
+  'door semantic matching must retain measured swing-arc evidence');
 assert(doorMatch.evidence.includes('source:wall-gap-door-scanner'),
   'door match evidence must retain scanner provenance');
 
