@@ -73,7 +73,27 @@ function roomsNearOpening(opening, rooms = [], walls = []) {
   if (!wall) return [];
   const wallEvidence = pointToSegmentEvidence(p, wall);
   const wallTolerance = Math.max(8, Number(wall.thickness) || 0);
-  if (!wallEvidence || wallEvidence.distance > wallTolerance || !wallEvidence.withinSegmentSpan) return [];
+  if (!wallEvidence) return [];
+  const onWallSegment = wallEvidence.distance <= wallTolerance && wallEvidence.withinSegmentSpan;
+  const gapLength = Number(sourceEvidence.gapLength);
+  const wallGapEvidence = sourceEvidence.inferredFrom === 'wall-gap-between-supported-wall-runs'
+    && sourceEvidence.nearWallEndpoint === true
+    && finite(gapLength) && gapLength > 0
+    && wallEvidence.withinSegmentSpan === false;
+  let onSupportedWallGap = false;
+  if (wallGapEvidence) {
+    const ax = Number(wall.start.x), ay = Number(wall.start.y);
+    const dx = Number(wall.end.x) - ax, dy = Number(wall.end.y) - ay;
+    const wallLength = Math.hypot(dx, dy);
+    const perpendicularDistance = wallLength > 0
+      ? Math.abs((Number(p.x) - ax) * dy - (Number(p.y) - ay) * dx) / wallLength
+      : Infinity;
+    const extensionLength = Math.max(0, -wallEvidence.projection, wallEvidence.projection - 1) * wallLength;
+    onSupportedWallGap = perpendicularDistance <= wallTolerance
+      && extensionLength <= gapLength / 2 + wallTolerance
+      && wallEvidence.endpointDistance <= gapLength / 2 + wallTolerance;
+  }
+  if (!onWallSegment && !onSupportedWallGap) return [];
 
   const nearest = nearestRoomEvidence(opening, rooms);
   const span = Math.max(Number(opening.width) || 0, Number(opening.height) || 0);
