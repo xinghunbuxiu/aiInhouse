@@ -86,6 +86,32 @@ assert(catalog.parsePipeline.every((categoryId) => categoryIds.includes(category
   'parsePipeline must not contain unknown categories');
 
 
+// Geometry relations are attached to the same original line candidates before
+// semantic asset matching, so a dark line can be interpreted with its context.
+const topologyLines = enrichLineGeometryEvidence([
+  { id: 'wall-horizontal', start: { x: 10, y: 50 }, end: { x: 110, y: 50 }, orientation: 'horizontal' },
+  { id: 'wall-parallel', start: { x: 10, y: 60 }, end: { x: 110, y: 60 }, orientation: 'horizontal' },
+  { id: 'partition-t', start: { x: 55, y: 50 }, end: { x: 55, y: 90 }, orientation: 'vertical' },
+  { id: 'isolated', start: { x: 200, y: 200 }, end: { x: 230, y: 200 }, orientation: 'horizontal' }
+]);
+const horizontalEvidence = topologyLines.find((line) => line.id === 'wall-horizontal').geometryEvidence;
+assert(horizontalEvidence.parallelLineIds.includes('wall-parallel'),
+  'parallel relation should be retained for matching');
+assert(horizontalEvidence.junctionLineIds.includes('partition-t'),
+  'T-junction relation should be retained for matching');
+assert(horizontalEvidence.tJunctionCount > 0,
+  'endpoint-to-segment connection should be recorded as a T-junction');
+assert.strictEqual(topologyLines.find((line) => line.id === 'isolated').geometryEvidence.junctionCount, 0,
+  'isolated geometry must not inherit unrelated junction evidence');
+const topologyMatch = matchWallLineCandidate({
+  id: 'wall-horizontal', source: 'morphology-wall-band', thickness: 11,
+  geometryEvidence: horizontalEvidence
+}, catalog);
+assert(topologyMatch.evidence.includes('parallel-relations:2'),
+  'wall match evidence should include nearby parallel relations');
+assert(topologyMatch.evidence.some((item) => item.startsWith('T-junctions:')),
+  'wall match evidence should include T-junction topology');
+
 // Original-pixel appearance must flow into candidate matching as supporting
 // evidence, without allowing color alone to label a line as a wall.
 const appearanceMatch = matchWallLineCandidate({
