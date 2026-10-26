@@ -114,6 +114,14 @@ assert(nearTWallEvidence.nearTJunctionLineIds.includes('near-t-branch'),
   'near-T evidence must preserve the counterpart line ID for traceability');
 assert(nearTBranchEvidence.nearTJunctionLineIds.includes('near-t-wall'),
   'near-T counterpart IDs must be symmetric');
+const nearTMatch = matchWallLineCandidate({
+  id: 'near-t-wall', source: 'morphology-wall-band', thickness: 11,
+  geometryEvidence: nearTWallEvidence
+}, catalog);
+assert(nearTMatch.evidence.includes('near-T-junctions:1'),
+  'near-T topology must survive semantic matching as supporting evidence');
+assert(nearTMatch.evidence.includes('near-T-lines:near-t-branch'),
+  'near-T semantic evidence must preserve the counterpart line ID for traceability');
 const nearTParallelLines = enrichLineGeometryEvidence([
   { id: 'parallel-base', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
   { id: 'parallel-offset', start: { x: 50, y: 6 }, end: { x: 80, y: 6 } }
