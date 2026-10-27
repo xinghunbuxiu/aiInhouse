@@ -173,6 +173,23 @@ const missingCoordinate = validateFloorplanDraft({
 assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-room-bounds'), 'Null room coordinates must not be coerced to zero.');
 assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-wall-segment'), 'Null wall coordinates must be rejected.');
 
+const overlappingWallSegments = validateFloorplanDraft({
+  rooms: [{ id: 'overlap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'wall-run-a', start: { x: 0, y: 0 }, end: { x: 120, y: 0 }, sourceEvidence: { candidateId: 'line-a' } },
+    { id: 'wall-run-b', start: { x: 80, y: 1 }, end: { x: 180, y: 1 }, sourceEvidence: { candidateId: 'line-b' } },
+    { id: 'wall-separate', start: { x: 0, y: 40 }, end: { x: 120, y: 40 } }
+  ],
+  doors: [],
+  windows: []
+});
+const overlappingWallIssue = overlappingWallSegments.issues.find(issue => issue.code === 'overlapping-wall-segments');
+assert(overlappingWallIssue, 'Collinear wall runs with a meaningful shared span must be surfaced for topology review.');
+assert(overlappingWallIssue.entityId === 'wall-run-a' && overlappingWallIssue.relatedEntityId === 'wall-run-b', 'Overlapping wall diagnostics must identify both source wall entities.');
+assert(overlappingWallIssue.overlapLength === 40, 'Overlapping wall diagnostics must report the measured overlap length.');
+assert(overlappingWallIssue.entityEvidence?.[0]?.sourceEvidence?.candidateId === 'line-a', 'Overlap diagnostics must retain the originating wall evidence.');
+assert(!overlappingWallSegments.issues.some(issue => issue.code === 'overlapping-wall-segments' && issue.relatedEntityId === 'wall-separate'), 'Parallel walls on distinct axes must not be reported as overlapping.');
+
 const openingRegressions = validateFloorplanDraft({
   rooms: [{ id: 'room-1', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [
