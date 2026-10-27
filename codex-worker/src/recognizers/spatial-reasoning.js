@@ -302,6 +302,57 @@ function validateFloorplanDraft(draft = {}) {
       }
     }
   }
+  // Find short unexplained breaks between nearly collinear wall runs. A gap
+  // covered by a detected door/window is treated as a plausible opening; all
+  // other gaps remain review diagnostics instead of being silently closed.
+  const openingEvidence = [...doors, ...windows].map(opening => ({ opening, p: openingPoint(opening) }))
+    .filter(item => point(item.p));
+  for (let i = 0; i < walls.length; i += 1) {
+    const a = walls[i];
+    if (!point(a.start) || !point(a.end) || segmentLength(a) < 2) continue;
+    const aHorizontal = Math.abs(Number(a.end.x) - Number(a.start.x)) >= Math.abs(Number(a.end.y) - Number(a.start.y));
+    const aFixed = aHorizontal ? (Number(a.start.y) + Number(a.end.y)) / 2 : (Number(a.start.x) + Number(a.end.x)) / 2;
+    const aMin = aHorizontal ? Math.min(Number(a.start.x), Number(a.end.x)) : Math.min(Number(a.start.y), Number(a.end.y));
+    const aMax = aHorizontal ? Math.max(Number(a.start.x), Number(a.end.x)) : Math.max(Number(a.start.y), Number(a.end.y));
+    for (let j = i + 1; j < walls.length; j += 1) {
+      const b = walls[j];
+      if (!point(b.start) || !point(b.end) || segmentLength(b) < 2) continue;
+      const bHorizontal = Math.abs(Number(b.end.x) - Number(b.start.x)) >= Math.abs(Number(b.end.y) - Number(b.start.y));
+      if (aHorizontal !== bHorizontal) continue;
+      const bFixed = bHorizontal ? (Number(b.start.y) + Number(b.end.y)) / 2 : (Number(b.start.x) + Number(b.end.x)) / 2;
+      if (Math.abs(aFixed - bFixed) > 2) continue;
+      const bMin = bHorizontal ? Math.min(Number(b.start.x), Number(b.end.x)) : Math.min(Number(b.start.y), Number(b.end.y));
+      const bMax = bHorizontal ? Math.max(Number(b.start.x), Number(b.end.x)) : Math.max(Number(b.start.y), Number(b.end.y));
+      let gapStart, gapEnd;
+      if (aMax < bMin) { gapStart = aMax; gapEnd = bMin; }
+      else if (bMax < aMin) { gapStart = bMax; gapEnd = aMin; }
+      else continue;
+      const gapLength = gapEnd - gapStart;
+      if (gapLength < 3 || gapLength > 24) continue;
+      const midpoint = (gapStart + gapEnd) / 2;
+      const openingSupportsGap = openingEvidence.some(({ opening, p }) => {
+        const axis = aHorizontal ? Number(p.x) : Number(p.y);
+        const fixed = aHorizontal ? Number(p.y) : Number(p.x);
+        const span = Math.max(Number(opening.width) || 0, Number(opening.height) || 0);
+        return Math.abs(fixed - (aFixed + bFixed) / 2) <= 20
+          && Math.abs(axis - midpoint) <= Math.max(12, span / 2)
+          && axis - span / 2 <= gapStart + 8
+          && axis + span / 2 >= gapEnd - 8;
+      });
+      if (openingSupportsGap) continue;
+      const aid = String(a.id || `wall-${i + 1}`);
+      const bid = String(b.id || `wall-${j + 1}`);
+      issues.push({
+        code: 'wall-network-gap-unexplained',
+        severity: 'review',
+        entityId: aid,
+        relatedEntityId: bid,
+        gapLength: Number(gapLength.toFixed(2)),
+        axisOffset: Number(Math.abs(aFixed - bFixed).toFixed(2)),
+        gapMidpoint: aHorizontal ? { x: Number(midpoint.toFixed(2)), y: Number(((aFixed + bFixed) / 2).toFixed(2)) } : { x: Number(((aFixed + bFixed) / 2).toFixed(2)), y: Number(midpoint.toFixed(2)) }
+      });
+    }
+  }
   const validateOpenings = (items, kind) => {
     const openingIds = new Set();
     items.forEach((opening, index) => {
