@@ -218,7 +218,7 @@ const openingSupportedWallGap = validateFloorplanDraft({
     { id: 'opening-gap-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
     { id: 'opening-gap-right', start: { x: 92, y: 1 }, end: { x: 180, y: 1 } }
   ],
-  doors: [{ id: 'opening-gap-door', x: 78, y: -4, width: 16, height: 8 }], windows: []
+  doors: [{ id: 'opening-gap-door', x: 78, y: -4, width: 16, height: 8, sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }], windows: []
 });
 assert(!openingSupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'A wall break covered by a detected opening must not be reported as unexplained.');
 
@@ -229,7 +229,7 @@ const verticallySupportedWallGap = validateFloorplanDraft({
     { id: 'vertical-opening-gap-upper', start: { x: 844, y: 200 }, end: { x: 844, y: 372 } },
     { id: 'vertical-opening-gap-lower', start: { x: 845, y: 444 }, end: { x: 845, y: 600 } }
   ],
-  doors: [{ id: 'vertical-opening-gap-door', x: 840, y: 372, width: 8, height: 72 }],
+  doors: [{ id: 'vertical-opening-gap-door', x: 840, y: 372, width: 8, height: 72, sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }],
   windows: []
 });
 assert(
