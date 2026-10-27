@@ -222,6 +222,21 @@ const openingSupportedWallGap = validateFloorplanDraft({
 });
 assert(!openingSupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'A wall break covered by a detected opening must not be reported as unexplained.');
 
+
+const verticallySupportedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'vertical-opening-gap-room', name: '卧室', type: 'bedroom', x: 800, y: 200, width: 200, height: 400 }],
+  walls: [
+    { id: 'vertical-opening-gap-upper', start: { x: 844, y: 200 }, end: { x: 844, y: 372 } },
+    { id: 'vertical-opening-gap-lower', start: { x: 845, y: 444 }, end: { x: 845, y: 600 } }
+  ],
+  doors: [{ id: 'vertical-opening-gap-door', x: 840, y: 372, width: 8, height: 72 }],
+  windows: []
+});
+assert(
+  !verticallySupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'),
+  'A vertical wall gap covered by a correctly centered vertical opening must not be reported as unexplained.'
+);
+
 const openingRegressions = validateFloorplanDraft({
   rooms: [{ id: 'room-1', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [
