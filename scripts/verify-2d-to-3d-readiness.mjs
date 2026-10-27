@@ -394,6 +394,10 @@ const finalizedWithUnexplainedWallGap = finalizeRecognitionDraft({
 assert(finalizedWithUnexplainedWallGap.quality.needsReview, 'An unexplained wall-network gap must propagate into the final recognition review gate.');
 assert(finalizedWithUnexplainedWallGap.quality.spatialValidation.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'Finalized quality must expose the wall-network gap diagnostic to downstream 3D readiness checks.');
 assert(finalizedWithUnexplainedWallGap.issues.some(issue => issue.includes('wall-network-gap-unexplained')), 'The serialized issue list must retain the wall-network gap for logs and reviewers.');
+assert(finalizedWithUnexplainedWallGap.threeDReadiness?.canAutoExtrude === false, 'An unexplained wall-network gap must disable automatic 3D extrusion.');
+assert(finalizedWithUnexplainedWallGap.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
+assert(finalizedWithUnexplainedWallGap.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
+
 
 const job = {
   job: {
