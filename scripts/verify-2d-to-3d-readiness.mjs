@@ -402,6 +402,30 @@ assert(finalizedWithSpatialContradiction.quality.threeDReadiness?.blockers?.incl
 assert(finalizedWithSpatialContradiction.quality.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
 
 
+// Source diagnostics must survive topology repair even when a small wall gap
+// is intentionally merged into one normalized segment.
+const finalizedWithRepairedSourceGap = finalizeRecognitionDraft({
+  rooms: [{ id: 'source-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'source-gap-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 }, sourceEvidence: { candidateId: 'source-line-left' } },
+    { id: 'source-gap-right', start: { x: 88, y: 1 }, end: { x: 180, y: 1 }, sourceEvidence: { candidateId: 'source-line-right' } }
+  ],
+  doors: [], windows: [], quality: { needsReview: false }
+});
+assert(
+  finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssues.some(issue => issue.code === 'wall-network-gap-unexplained'),
+  'Pre-repair spatial diagnostics must preserve wall gaps that topology normalization later merges.'
+);
+assert(
+  finalizedWithRepairedSourceGap.issues.some(issue => issue.includes('修复前空间校验') && issue.includes('wall-network-gap-unexplained')),
+  'Serialized diagnostics must identify source-stage wall gaps separately from unresolved post-repair issues.'
+);
+assert(
+  finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssueCount === finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssues.length,
+  'Source diagnostic counts must match the preserved structured source issues.'
+);
+
+
 const job = {
   job: {
     job_no: 'VERIFY-2D-3D',
