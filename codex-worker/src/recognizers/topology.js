@@ -321,10 +321,17 @@ function findNearestWall(opening, walls = []) {
     ? walls.filter((wall) => wall.orientation === expectedWallOrientation)
     : walls;
   if (preferredCandidateId) {
+    // A source candidate ID is useful evidence, but it must not override an
+    // explicit orientation constraint. Otherwise a stale/misclassified wall
+    // reference can pull a horizontal opening onto a vertical wall (or vice
+    // versa), creating a geometrically impossible attachment.
     const preferred = walls.filter((wall) => (
-      wall.sourceCandidateId === preferredCandidateId
-      || wall.id === preferredCandidateId
-      || String(wall.id || '').includes(preferredCandidateId)
+      (!expectedWallOrientation || wall.orientation === expectedWallOrientation)
+      && (
+        wall.sourceCandidateId === preferredCandidateId
+        || wall.id === preferredCandidateId
+        || String(wall.id || '').includes(preferredCandidateId)
+      )
     ));
     if (preferred.length) {
       eligibleWalls = preferred;
