@@ -4538,14 +4538,16 @@ function buildRecognitionDraft(job, preprocessing = null) {
 
 function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   const merged = mergePreprocessing(draft, preprocessing);
-  const repaired = reviewSemanticDoorPriors(
-    repairRecognitionTopology(
-      preferVisualDoorCandidates(
-        preferVisualWindowCandidates(merged, preprocessing),
-        preprocessing
-      )
-    )
+  const candidateDraft = preferVisualDoorCandidates(
+    preferVisualWindowCandidates(merged, preprocessing),
+    preprocessing
   );
+  // Capture diagnostics before topology normalization/merging. Repair can join
+  // wall runs and make a source gap disappear from the final geometry; retain
+  // that original evidence for audit without automatically treating every
+  // repaired source issue as an unresolved final blocker.
+  const sourceSpatialValidation = validateFloorplanDraft(candidateDraft);
+  const repaired = reviewSemanticDoorPriors(repairRecognitionTopology(candidateDraft));
   const spatialValidation = validateFloorplanDraft(repaired);
   const previousQuality = repaired.quality || {};
   // Spatial review findings must gate automatic 3D extrusion, not merely set a
@@ -4580,6 +4582,9 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
     const related = issue.relatedEntityId ? ` -> ${issue.relatedEntityId}` : '';
     return `识别问题${severity}: ${code}${entity}${related}`;
   });
+  for (const issue of sourceSpatialValidation.issues) {
+    issues.push(`修复前空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
+  }
   for (const issue of spatialValidation.issues) {
     issues.push(`空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
   }
@@ -4597,6 +4602,11 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
       ...(gatedCommercialReadiness ? { commercialReadiness: gatedCommercialReadiness } : {}),
       ...(gatedThreeDReadiness ? { threeDReadiness: gatedThreeDReadiness } : {}),
       spatialValidation: {
+        // Source-stage findings are evidence for traceability, not blockers by
+        // themselves; the post-repair validation below determines unresolved
+        // geometry and automatic-3D gating.
+        sourceIssueCount: sourceSpatialValidation.issues.length,
+        sourceIssues: sourceSpatialValidation.issues,
         valid: spatialValidation.valid,
         reviewRequired: spatialValidation.reviewRequired,
         issueCount: spatialValidation.issues.length,
