@@ -78,6 +78,26 @@ assert.deepEqual(attachmentConflict?.nearestWallEvidence, {
 assert.equal(attachmentConflict?.nearestRoomEvidence?.roomId, 'room-a',
   'attachment conflicts should include nearest-room evidence for triage');
 
+// A proposed/unconfirmed symbol must not hide a real wall-network gap.
+const gapWalls = [
+  { id: 'gap-wall-left', start: { x: 0, y: 50 }, end: { x: 40, y: 50 } },
+  { id: 'gap-wall-right', start: { x: 60, y: 50 }, end: { x: 100, y: 50 } }
+];
+const proposedOpeningGapReport = validateFloorplanDraft({
+  walls: gapWalls,
+  doors: [{ id: 'proposed-gap-door', center: { x: 50, y: 50 }, width: 20, height: 10,
+    sourceEvidence: { needsVisualConfirmation: true } }]
+});
+assert.equal(proposedOpeningGapReport.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), true,
+  'an unconfirmed opening candidate must not suppress an unexplained wall-network gap');
+const confirmedOpeningGapReport = validateFloorplanDraft({
+  walls: gapWalls,
+  doors: [{ id: 'confirmed-gap-door', center: { x: 50, y: 50 }, width: 20, height: 10,
+    sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }]
+});
+assert.equal(confirmedOpeningGapReport.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), false,
+  'a visually confirmed opening aligned with the gap may explain that wall-network break');
+
 const overlapReport = validateFloorplanDraft({
   rooms: [
     room,
