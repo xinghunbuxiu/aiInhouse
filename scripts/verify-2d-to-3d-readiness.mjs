@@ -202,6 +202,16 @@ assert(unexplainedGapIssue, 'A short unexplained break between nearly collinear 
 assert(unexplainedGapIssue.entityId === 'gap-wall-left' && unexplainedGapIssue.relatedEntityId === 'gap-wall-right', 'Wall-gap diagnostics must identify both wall runs.');
 assert(unexplainedGapIssue.gapLength === 12, 'Wall-gap diagnostics must report the measured gap length.');
 
+const longUnexplainedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'long-gap-room', name: '门厅', type: 'entry', x: 0, y: 0, width: 220, height: 100 }],
+  walls: [
+    { id: 'long-gap-left', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
+    { id: 'long-gap-right', start: { x: 120, y: 1 }, end: { x: 200, y: 1 } }
+  ], doors: [], windows: []
+});
+const longGapIssue = longUnexplainedWallGap.issues.find(issue => issue.code === 'wall-network-gap-unexplained');
+assert(longGapIssue?.gapLength === 60, 'A likely doorway-sized gap without a detected opening must remain visible for review.');
+
 const openingSupportedWallGap = validateFloorplanDraft({
   rooms: [{ id: 'opening-gap-room', name: '门厅', type: 'entry', x: 0, y: 0, width: 200, height: 100 }],
   walls: [
