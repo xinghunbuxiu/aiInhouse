@@ -255,6 +255,53 @@ function validateFloorplanDraft(draft = {}) {
       issues.push({ code: 'invalid-wall-thickness', severity: 'review', entityId: id });
     }
   });
+  // Two distinct wall entities that occupy the same collinear span usually
+  // indicate duplicate recognition or unresolved shared-wall geometry. Keep
+  // this as a review diagnostic (not a hard error) because source recognizers
+  // may intentionally emit layered wall evidence before topology repair.
+  for (let i = 0; i < walls.length; i += 1) {
+    const a = walls[i];
+    if (!point(a.start) || !point(a.end) || segmentLength(a) < 2) continue;
+    const aid = String(a.id || `wall-${i + 1}`);
+    const adx = Math.abs(Number(a.end.x) - Number(a.start.x));
+    const ady = Math.abs(Number(a.end.y) - Number(a.start.y));
+    const horizontal = adx >= ady;
+    for (let j = i + 1; j < walls.length; j += 1) {
+      const b = walls[j];
+      if (!point(b.start) || !point(b.end) || segmentLength(b) < 2) continue;
+      const bdx = Math.abs(Number(b.end.x) - Number(b.start.x));
+      const bdy = Math.abs(Number(b.end.y) - Number(b.start.y));
+      if (horizontal !== (bdx >= bdy)) continue;
+      const bid = String(b.id || `wall-${j + 1}`);
+      let overlapLength = 0;
+      let axisOffset = Infinity;
+      if (horizontal) {
+        axisOffset = Math.max(
+          Math.abs(Number(a.start.y) - Number(b.start.y)),
+          Math.abs(Number(a.end.y) - Number(b.end.y))
+        );
+        overlapLength = Math.min(Math.max(Number(a.start.x), Number(a.end.x)), Math.max(Number(b.start.x), Number(b.end.x)))
+          - Math.max(Math.min(Number(a.start.x), Number(a.end.x)), Math.min(Number(b.start.x), Number(b.end.x)));
+      } else {
+        axisOffset = Math.max(
+          Math.abs(Number(a.start.x) - Number(b.start.x)),
+          Math.abs(Number(a.end.x) - Number(b.end.x))
+        );
+        overlapLength = Math.min(Math.max(Number(a.start.y), Number(a.end.y)), Math.max(Number(b.start.y), Number(b.end.y)))
+          - Math.max(Math.min(Number(a.start.y), Number(a.end.y)), Math.min(Number(b.start.y), Number(b.end.y)));
+      }
+      if (axisOffset <= 2 && overlapLength > 2) {
+        issues.push({
+          code: 'overlapping-wall-segments',
+          severity: 'review',
+          entityId: aid,
+          relatedEntityId: bid,
+          overlapLength: Number(overlapLength.toFixed(2)),
+          axisOffset: Number(axisOffset.toFixed(2))
+        });
+      }
+    }
+  }
   const validateOpenings = (items, kind) => {
     const openingIds = new Set();
     items.forEach((opening, index) => {
