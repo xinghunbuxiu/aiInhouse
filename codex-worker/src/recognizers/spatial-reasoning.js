@@ -305,8 +305,13 @@ function validateFloorplanDraft(draft = {}) {
   // Find short unexplained breaks between nearly collinear wall runs. A gap
   // covered by a detected door/window is treated as a plausible opening; all
   // other gaps remain review diagnostics instead of being silently closed.
+  // Only visually confirmed openings can explain a break in the wall network.
+  // Proposed semantic priors and unconfirmed visual candidates must not hide a
+  // topology defect merely because their bounding box overlaps the gap.
   const openingEvidence = [...doors, ...windows].map(opening => ({ opening, p: openingPoint(opening) }))
-    .filter(item => point(item.p));
+    .filter(item => point(item.p)
+      && item.opening.sourceEvidence?.confirmedOpening === true
+      && item.opening.sourceEvidence?.needsVisualConfirmation !== true);
   for (let i = 0; i < walls.length; i += 1) {
     const a = walls[i];
     if (!point(a.start) || !point(a.end) || segmentLength(a) < 2) continue;
