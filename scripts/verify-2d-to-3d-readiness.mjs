@@ -257,6 +257,27 @@ const wallEndpointNearMiss = validateFloorplanDraft({
 assert(wallEndpointNearMiss.issues.some(issue => issue.code === 'door-not-associated-with-room'),
   'A claimed wall attachment beyond the measured wall segment must not create room association');
 
+// A preferred source-wall reference must never defeat the opening's measured orientation.
+const orientationConstrainedAttachment = repairRecognitionTopology({
+  rooms: [{ id: 'orientation-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [
+    { id: 'wall-horizontal-target', sourceCandidateId: 'candidate-horizontal', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, confidence: 0.9 },
+    { id: 'wall-vertical-wrong', sourceCandidateId: 'candidate-vertical', start: { x: 100, y: 0 }, end: { x: 100, y: 100 }, confidence: 0.95 }
+  ],
+  doors: [{
+    id: 'orientation-door', x: 40, y: 0, width: 28, height: 8, confidence: 0.8,
+    sourceEvidence: {
+      expectedWallOrientation: 'horizontal',
+      wallCandidateId: 'candidate-vertical'
+    }
+  }],
+  windows: []
+});
+const orientationDoor = orientationConstrainedAttachment.doors.find((door) => door.id === 'orientation-door');
+assert(orientationDoor, 'Orientation-constrained door should remain in the topology result.');
+assert(orientationDoor.orientation === 'horizontal', 'A door with an explicit horizontal support constraint must not attach to a vertical wall.');
+assert(orientationDoor.attachedWallId !== 'wall-vertical-wrong', 'A stale preferred candidate ID must not override geometric orientation evidence.');
+
 const unlinkedOpening = validateFloorplanDraft({
   rooms: [{ id: 'room-unlinked', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [{ id: 'wall-unlinked', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
