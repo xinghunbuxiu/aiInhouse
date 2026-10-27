@@ -190,6 +190,28 @@ assert(overlappingWallIssue.overlapLength === 40, 'Overlapping wall diagnostics 
 assert(overlappingWallIssue.entityEvidence?.[0]?.sourceEvidence?.candidateId === 'line-a', 'Overlap diagnostics must retain the originating wall evidence.');
 assert(!overlappingWallSegments.issues.some(issue => issue.code === 'overlapping-wall-segments' && issue.relatedEntityId === 'wall-separate'), 'Parallel walls on distinct axes must not be reported as overlapping.');
 
+const unexplainedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'gap-wall-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
+    { id: 'gap-wall-right', start: { x: 92, y: 1 }, end: { x: 180, y: 1 } }
+  ], doors: [], windows: []
+});
+const unexplainedGapIssue = unexplainedWallGap.issues.find(issue => issue.code === 'wall-network-gap-unexplained');
+assert(unexplainedGapIssue, 'A short unexplained break between nearly collinear wall runs must be surfaced.');
+assert(unexplainedGapIssue.entityId === 'gap-wall-left' && unexplainedGapIssue.relatedEntityId === 'gap-wall-right', 'Wall-gap diagnostics must identify both wall runs.');
+assert(unexplainedGapIssue.gapLength === 12, 'Wall-gap diagnostics must report the measured gap length.');
+
+const openingSupportedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'opening-gap-room', name: '门厅', type: 'entry', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'opening-gap-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
+    { id: 'opening-gap-right', start: { x: 92, y: 1 }, end: { x: 180, y: 1 } }
+  ],
+  doors: [{ id: 'opening-gap-door', x: 78, y: -4, width: 16, height: 8 }], windows: []
+});
+assert(!openingSupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'A wall break covered by a detected opening must not be reported as unexplained.');
+
 const openingRegressions = validateFloorplanDraft({
   rooms: [{ id: 'room-1', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
   walls: [
