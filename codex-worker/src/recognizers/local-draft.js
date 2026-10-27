@@ -4551,23 +4551,23 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   // Spatial review findings must gate automatic 3D extrusion, not merely set a
   // side-channel quality flag. Keep scores/metrics intact for diagnosis.
   const spatialReviewRequired = spatialValidation.reviewRequired || !spatialValidation.valid;
-  const gatedCommercialReadiness = spatialReviewRequired && repaired.commercialReadiness
+  const gatedCommercialReadiness = spatialReviewRequired && previousQuality.commercialReadiness
     ? {
-      ...repaired.commercialReadiness,
-      status: repaired.commercialReadiness.status === 'blocked' ? 'blocked' : 'needs_human_review',
+      ...previousQuality.commercialReadiness,
+      status: previousQuality.commercialReadiness.status === 'blocked' ? 'blocked' : 'needs_human_review',
       autoPass: false,
-      blockingReasons: [...new Set([...(repaired.commercialReadiness.blockingReasons || []), 'spatial-validation-review'])],
-      reviewChecklist: [...new Set([...(repaired.commercialReadiness.reviewChecklist || []), '空间拓扑存在未解决的几何诊断；人工确认前不得自动放行。'])]
+      blockingReasons: [...new Set([...(previousQuality.commercialReadiness.blockingReasons || []), 'spatial-validation-review'])],
+      reviewChecklist: [...new Set([...(previousQuality.commercialReadiness.reviewChecklist || []), '空间拓扑存在未解决的几何诊断；人工确认前不得自动放行。'])]
     }
     : repaired.commercialReadiness;
-  const gatedThreeDReadiness = spatialReviewRequired && repaired.threeDReadiness
+  const gatedThreeDReadiness = spatialReviewRequired && previousQuality.threeDReadiness
     ? {
-      ...repaired.threeDReadiness,
-      status: repaired.threeDReadiness.status === 'blocked' ? 'blocked' : 'review_required',
+      ...previousQuality.threeDReadiness,
+      status: previousQuality.threeDReadiness.status === 'blocked' ? 'blocked' : 'review_required',
       canAutoExtrude: false,
-      commercialStatus: gatedCommercialReadiness?.status || repaired.threeDReadiness.commercialStatus,
-      blockers: [...new Set([...(repaired.threeDReadiness.blockers || []), 'spatial-validation-review'])],
-      reviewChecklist: [...new Set([...(repaired.threeDReadiness.reviewChecklist || []), '墙网连续性或空间几何存在未解决问题；人工确认前禁止自动拉伸建模。'])]
+      commercialStatus: gatedCommercialReadiness?.status || previousQuality.threeDReadiness.commercialStatus,
+      blockers: [...new Set([...(previousQuality.threeDReadiness.blockers || []), 'spatial-validation-review'])],
+      reviewChecklist: [...new Set([...(previousQuality.threeDReadiness.reviewChecklist || []), '墙网连续性或空间几何存在未解决问题；人工确认前禁止自动拉伸建模。'])]
     }
     : repaired.threeDReadiness;
   // Keep legacy string issues and preserve structured diagnostics instead of silently dropping them.
@@ -4585,8 +4585,6 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   }
   return {
     ...repaired,
-    ...(gatedCommercialReadiness ? { commercialReadiness: gatedCommercialReadiness } : {}),
-    ...(gatedThreeDReadiness ? { threeDReadiness: gatedThreeDReadiness } : {}),
     issues,
     spatialGraph: spatialValidation.graph,
     quality: {
@@ -4596,6 +4594,8 @@ function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
       needsReview: Boolean(previousQuality.needsReview)
         || spatialValidation.reviewRequired
         || !spatialValidation.valid,
+      ...(gatedCommercialReadiness ? { commercialReadiness: gatedCommercialReadiness } : {}),
+      ...(gatedThreeDReadiness ? { threeDReadiness: gatedThreeDReadiness } : {}),
       spatialValidation: {
         valid: spatialValidation.valid,
         reviewRequired: spatialValidation.reviewRequired,
