@@ -384,6 +384,17 @@ assert(invalidFinalizedDraft.quality.spatialValidation.metrics.reviewCount > 0, 
 
 
 
+const finalizedWithUnexplainedWallGap = finalizeRecognitionDraft({
+  rooms: [{ id: 'final-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 220, height: 100 }],
+  walls: [
+    { id: 'final-gap-left', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
+    { id: 'final-gap-right', start: { x: 120, y: 1 }, end: { x: 200, y: 1 } }
+  ], doors: [], windows: [], quality: { needsReview: false }
+});
+assert(finalizedWithUnexplainedWallGap.quality.needsReview, 'An unexplained wall-network gap must propagate into the final recognition review gate.');
+assert(finalizedWithUnexplainedWallGap.quality.spatialValidation.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'Finalized quality must expose the wall-network gap diagnostic to downstream 3D readiness checks.');
+assert(finalizedWithUnexplainedWallGap.issues.some(issue => issue.includes('wall-network-gap-unexplained')), 'The serialized issue list must retain the wall-network gap for logs and reviewers.');
+
 const job = {
   job: {
     job_no: 'VERIFY-2D-3D',
