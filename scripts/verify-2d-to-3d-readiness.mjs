@@ -384,19 +384,22 @@ assert(invalidFinalizedDraft.quality.spatialValidation.metrics.reviewCount > 0, 
 
 
 
-const finalizedWithUnexplainedWallGap = finalizeRecognitionDraft({
-  rooms: [{ id: 'final-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 220, height: 100 }],
+const finalizedWithSpatialContradiction = finalizeRecognitionDraft({
+  rooms: [
+    { id: 'final-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 220, height: 100 },
+    { id: 'final-overlap-room', name: '卧室', type: 'bedroom', x: 180, y: 20, width: 80, height: 100 }
+  ],
   walls: [
     { id: 'final-gap-left', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
     { id: 'final-gap-right', start: { x: 120, y: 1 }, end: { x: 200, y: 1 } }
   ], doors: [], windows: [], quality: { needsReview: false }
 });
-assert(finalizedWithUnexplainedWallGap.quality.needsReview, 'An unexplained wall-network gap must propagate into the final recognition review gate.');
-assert(finalizedWithUnexplainedWallGap.quality.spatialValidation.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'Finalized quality must expose the wall-network gap diagnostic to downstream 3D readiness checks.');
-assert(finalizedWithUnexplainedWallGap.issues.some(issue => issue.includes('wall-network-gap-unexplained')), 'The serialized issue list must retain the wall-network gap for logs and reviewers.');
-assert(finalizedWithUnexplainedWallGap.threeDReadiness?.canAutoExtrude === false, 'An unexplained wall-network gap must disable automatic 3D extrusion.');
-assert(finalizedWithUnexplainedWallGap.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
-assert(finalizedWithUnexplainedWallGap.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
+assert(finalizedWithSpatialContradiction.quality.needsReview, 'An unresolved spatial contradiction must propagate into the final review gate.');
+assert(finalizedWithSpatialContradiction.quality.spatialValidation.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Finalized quality must expose spatial contradiction diagnostics to downstream readiness checks.');
+assert(finalizedWithSpatialContradiction.issues.some(issue => issue.includes('room-bounds-overlap')), 'The serialized issue list must retain spatial contradictions for logs and reviewers.');
+assert(finalizedWithSpatialContradiction.threeDReadiness?.canAutoExtrude === false, 'An unresolved spatial contradiction must disable automatic 3D extrusion.');
+assert(finalizedWithSpatialContradiction.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
+assert(finalizedWithSpatialContradiction.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
 
 
 const job = {
