@@ -397,9 +397,9 @@ const finalizedWithSpatialContradiction = finalizeRecognitionDraft({
 assert(finalizedWithSpatialContradiction.quality.needsReview, 'An unresolved spatial contradiction must propagate into the final review gate.');
 assert(finalizedWithSpatialContradiction.quality.spatialValidation.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Finalized quality must expose spatial contradiction diagnostics to downstream readiness checks.');
 assert(finalizedWithSpatialContradiction.issues.some(issue => issue.includes('room-bounds-overlap')), 'The serialized issue list must retain spatial contradictions for logs and reviewers.');
-assert(finalizedWithSpatialContradiction.threeDReadiness?.canAutoExtrude === false, 'An unresolved spatial contradiction must disable automatic 3D extrusion.');
-assert(finalizedWithSpatialContradiction.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
-assert(finalizedWithSpatialContradiction.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
+assert(finalizedWithSpatialContradiction.quality.threeDReadiness?.canAutoExtrude === false, 'An unresolved spatial contradiction must disable automatic 3D extrusion.');
+assert(finalizedWithSpatialContradiction.quality.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
+assert(finalizedWithSpatialContradiction.quality.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
 
 
 const job = {
