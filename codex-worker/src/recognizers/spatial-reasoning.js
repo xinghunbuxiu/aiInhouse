@@ -328,7 +328,7 @@ function validateFloorplanDraft(draft = {}) {
       else if (bMax < aMin) { gapStart = bMax; gapEnd = aMin; }
       else continue;
       const gapLength = gapEnd - gapStart;
-      if (gapLength < 3 || gapLength > 24) continue;
+      if (gapLength < 3 || gapLength > 96) continue;
       const midpoint = (gapStart + gapEnd) / 2;
       const openingSupportsGap = openingEvidence.some(({ opening, p }) => {
         const axis = aHorizontal ? Number(p.x) : Number(p.y);
