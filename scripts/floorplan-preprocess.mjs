@@ -221,7 +221,7 @@ def extract_ocr_candidates(image_path):
             attempts.append({"language": language, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
             continue
         grouped = {}
-        for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\\t"):
+        for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\t"):
             if row.get("level") != "5":
                 continue
             text = (row.get("text") or "").strip()
@@ -2382,7 +2382,8 @@ print(json.dumps({
         "annotationSymbolCandidateCount": len(annotation_symbol_candidates),
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
-    "ocrCandidates": ocr_candidates,\n    "ocrStatus": ocr_status,
+    "ocrCandidates": ocr_candidates,
+    "ocrStatus": ocr_status,
     "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "wallJunctionOverlay": debug_wall_junction_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
