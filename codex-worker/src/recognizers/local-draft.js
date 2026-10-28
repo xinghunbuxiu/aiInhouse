@@ -71,7 +71,7 @@ function normalizeOcrText(text = '') {
 function normalizeOcrCandidate(candidate = {}) {
   const rawText = normalizeOcrText(candidate.text || candidate.label || candidate.name || candidate.value);
   const text = rawText.replace(/^[|.,:;，。；：、!！?？"'“”‘’()（）【】{}]+|[|.,:;，。；：、!！?？"'“”‘’()（）【】{}]+$/g, '');
-  const roomLabelPattern = /^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九\\d]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间|living\\s*room|bedroom|kitchen|bathroom|dining\\s*room|balcony|foyer)$/i;
+  const roomLabelPattern = /^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九\d]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间|living\s*room|bedroom|kitchen|bathroom|dining\s*room|balcony|foyer)$/i;
   // OCR may join two adjacent labels or dimensions into one text line. Do not
   // assign such a mixed line to a room merely because it contains one keyword.
   if (!text || !roomLabelPattern.test(text)) {
