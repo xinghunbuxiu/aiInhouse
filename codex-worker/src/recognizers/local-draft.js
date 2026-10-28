@@ -4380,20 +4380,28 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     room?.sourceEvidence?.layoutCountAssigned
     || String(room?.source || '').includes('layout-count-semantics')
   )).length;
-  const ungroundedNamed = list.filter((room) => Boolean(room?.name)
-    && !room?.sourceEvidence?.ocrCandidateId
-    && !room?.sourceEvidence?.ocrText
+  const hasExplicitSemanticEvidence = (room) => Boolean(
+    room?.sourceEvidence?.ocrCandidateId || room?.sourceEvidence?.ocrText
+  );
+  const ungroundedNamedRooms = list.filter((room) => Boolean(room?.name)
+    && !hasExplicitSemanticEvidence(room)
     && !room?.sourceEvidence?.semanticTemplateOnly
     && !room?.sourceEvidence?.layoutCountAssigned
     && !String(room?.source || '').includes('layout-count-semantics')
-    && !String(room?.source || '').includes('layout-template')).length;
+    && !String(room?.source || '').includes('layout-template'));
+  const ocrGroundedRoomNames = list
+    .filter(hasExplicitSemanticEvidence)
+    .map((room) => room.name || room.id)
+    .filter(Boolean);
   return {
     roomCount: list.length,
     ocrCandidateCount: ocrCandidates.length,
     ocrGroundedRoomCount: ocrGrounded,
+    ocrGroundedRoomNames,
     templateOnlyRoomCount: templateOnly,
     layoutCountInferredRoomCount: layoutCountInferred,
-    namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamed,
+    namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamedRooms.length,
+    namedRoomsWithoutExplicitSemanticEvidence: ungroundedNamedRooms.map((room) => room.name || room.id).filter(Boolean),
     semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0 && templateOnly === 0 && layoutCountInferred === 0,
     note: ocrCandidates.length === 0
       ? 'No OCR text candidates were produced; room names may be inferred from layout heuristics and must not be treated as image-confirmed.'
