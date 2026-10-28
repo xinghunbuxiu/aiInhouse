@@ -74,13 +74,42 @@ flowchart TD
   N1 --> R
 ```
 
+### Evidence-to-design data flow
+
+This is the implementation contract for the next stages: appearance features stay attached to the line that produced them; they inform ranking and review but never independently declare a line to be a wall.
+
+```mermaid
+flowchart LR
+  A[Original plan pixels] --> B[OpenCV Hough candidates]
+  A --> C[Morphology wall-band candidates]
+  B --> D[Raster appearance sampler]
+  C --> D
+  D --> E[Line evidence: luminance, dark ratio, contrast, BGR, thickness]
+  E --> F[Geometry features: endpoints, junctions, parallelism, gaps]
+  F --> G[Room / wall / opening candidate fusion]
+  G --> H[Topology and spatial validation]
+  H -->|hard error or unresolved review| I[Human correction overlay + issue coordinates]
+  H -->|all gates pass| J[Deterministic 3D scene]
+  J --> K[Mesh and opening validation]
+  K --> L[Render actual equirectangular panorama]
+  L --> M[2:1 dimensions + viewer-load acceptance]
+  I --> N[Ground-truth correction fixture]
+  N --> F
+```
+
+The sampler records measurable appearance rather than semantic conclusions. In particular, a dark line can still be a dimension line, furniture edge, or annotation; wall classification must continue to combine appearance with geometry, topology, provenance, and symbol evidence.
+
+### Real sample findings that must remain visible
+
+For the checked-in `WX20260329-112615@2x.png` sample (1400×976), the last inspected report found 7 room regions, 29 wall candidates, 25 confirmed openings and 1 proposed opening. The result remained `needs_human_review`; two `wall-network-gap-unexplained` review issues were reported around x=844 and x=1184. The room labels/regions also need a grounded visual audit because the recognized list did not clearly account for every visible named space. These are review findings, not claims of measured model accuracy.
+
 ### Stage gates, evidence, and where to debug
 
 | Gate | Required evidence | Failure meaning | First place to inspect |
 |---|---|---|---|
 | G0 Input/preprocess | Original image retained; dimensions and coordinate mapping; preprocessing report | Image degraded, rotated, cropped, or coordinate transform lost | `scripts/floorplan-preprocess.mjs`, `scripts/batch-recognition-sample.mjs`, generated `recognition-preprocess.json` |
 | G1 Runtime | `summary.json` exists and `visualEvidence.visionAvailable === true` | Pipeline silently skipped visual recognition or Python/OpenCV/provider failed | Workflow step “Fail if the real sample silently skips visual recognition”; `summary.json` |
-| G2 Evidence extraction | Lines/contours/junctions/parallel lines plus source and appearance evidence when available | Detector produced too little geometry, or image appearance evidence is absent | `codex-worker/src/recognizers/geometry-feature-detector.js`, `scripts/inspect-floorplan-geometry.mjs` |
+| G2 Evidence extraction | Hough and morphology wall-band candidates retain source IDs, luminance, dark-pixel ratio, local contrast, and mean BGR color | Geometry exists but the image's light/dark/color evidence was dropped before fusion | `scripts/floorplan-preprocess.mjs`, `codex-worker/src/recognizers/geometry-feature-detector.js`, `scripts/inspect-floorplan-geometry.mjs` |
 | G3 Semantic fusion | OCR labels assigned only to containing rooms; each candidate retains source evidence | Labels jump rooms or semantic guess is mistaken for observed fact | `codex-worker/src/recognizers/local-draft.js`, `floorplan-grammar.js`, `recognition-assets.json` |
 | G4 Topology | Connected wall runs; unexplained gaps surfaced; opening linked to a real wall and evidence | A gap is hidden by an unconfirmed door/window, or opening/room/wall relations are missing | `codex-worker/src/recognizers/topology.js`, `spatial-reasoning.js` |
 | G5 Readiness | Modelable room boundaries; adequate geometry proof; confirmed openings; blockers explicitly listed | Recognition may return candidates, but geometry is not safe to extrude into 3D | `scripts/verify-2d-to-3d-readiness.mjs` and readiness report |
