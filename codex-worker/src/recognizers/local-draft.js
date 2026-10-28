@@ -4394,7 +4394,7 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     templateOnlyRoomCount: templateOnly,
     layoutCountInferredRoomCount: layoutCountInferred,
     namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamed,
-    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0,
+    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0 && templateOnly === 0 && layoutCountInferred === 0,
     note: ocrCandidates.length === 0
       ? 'No OCR text candidates were produced; room names may be inferred from layout heuristics and must not be treated as image-confirmed.'
       : 'OCR-derived labels are tracked separately from template/layout-count inference.'
