@@ -668,6 +668,16 @@ function buildWallsFromGeometryCandidates(preprocessing = {}) {
       sourceCandidateId: line.id || '',
       wallEvidence: line.wallEvidence || null,
       assetMatch: line.assetMatch || null,
+      // Carry measured raster appearance into the final wall evidence so spatial
+      // review can explain a gap with traceable source pixels, without promoting
+      // darkness/contrast into a semantic wall label.
+      sourceEvidence: {
+        sourceCandidateId: line.id || '',
+        appearance: line.appearance || null,
+        wallEvidence: line.wallEvidence || null,
+        assetMatch: line.assetMatch || null
+      },
+      appearance: line.appearance || null,
       orientation: line.orientation
     }));
 }
