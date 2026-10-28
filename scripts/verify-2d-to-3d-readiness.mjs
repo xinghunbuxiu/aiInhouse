@@ -131,6 +131,14 @@ const punctuatedOcrRoom = assignOcrSemantics([
 ]);
 assert(punctuatedOcrRoom[0].name === '客厅' && punctuatedOcrRoom[0].type === 'living',
   'Punctuation around a single OCR room label may be trimmed without losing its geometry-grounded meaning.');
+const partialOcrRoom = assignOcrSemantics([
+  { id: 'child-bedroom', name: '空间E', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-partial-bedroom', text: '男孩卧', x: 20, y: 30, width: 30, height: 20, confidence: 0.9, source: 'tesseract' }
+]);
+assert(partialOcrRoom[0].sourceEvidence?.ocrLabelNeedsReview === true
+  && partialOcrRoom[0].semanticNeedsReview === true,
+  'Partially recognized room labels must retain OCR evidence and be marked for manual semantic review.');
 assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
 assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
 const benchmarkAttachedCount = countBenchmarkAttachedOpenings([
