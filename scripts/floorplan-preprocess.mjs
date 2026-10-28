@@ -173,7 +173,7 @@ function buildCompressedImage(sourcePath, outputDir) {
 
 function runPythonVision(sourcePath, outputDir) {
   const script = `
-import json, math, sys, csv, io, shutil, subprocess, os, tempfile
+import json, math, sys, csv, io, shutil, subprocess, os, tempfile, re
 try:
     import cv2
     import numpy as np
@@ -211,6 +211,11 @@ def extract_ocr_candidates(image_path):
         return [], {"available": False, "engine": "tesseract", "error": "tesseract_not_installed", "attempts": []}
 
     attempts = []
+    room_label_pattern = re.compile(r"^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九0-9]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间)$")
+    def is_room_label(text):
+        cleaned = re.sub(r"^[|.,:;，。；：、!！?？\\\"'“”‘’()（）【】{}]+|[|.,:;，。；：、!！?？\\\"'“”‘’()（）【】{}]+$", "", str(text or "").strip())
+        return bool(room_label_pattern.fullmatch(cleaned))
+
     def parse_tsv(tsv, language, psm, scale=1.0):
         grouped = {}
         for row in csv.DictReader(io.StringIO(tsv), delimiter="\\t"):
@@ -301,7 +306,9 @@ def extract_ocr_candidates(image_path):
                 merged.append(candidate)
             else:
                 existing = merged[match_index]
-                if (len(candidate["text"]), candidate["confidence"]) > (len(existing["text"]), existing["confidence"]):
+                candidate_score = (1 if is_room_label(candidate["text"]) else 0, len(candidate["text"]), candidate["confidence"])
+                existing_score = (1 if is_room_label(existing["text"]) else 0, len(existing["text"]), existing["confidence"])
+                if candidate_score > existing_score:
                     merged[match_index] = candidate
 
         if merged:
