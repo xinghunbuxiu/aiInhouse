@@ -155,14 +155,17 @@ function assignOcrSemantics(geometryRooms = [], ocrCandidates = []) {
     }
 
     usedLabels.add(best.label);
+    const ocrLabelNeedsReview = /^(男孩卧|女孩卧|卧室[一二三四五六七八九0-9]?)$/.test(best.label.text);
     return {
       ...room,
       name: best.label.text,
       type: best.label.type,
       confidence: Number(Math.min(0.9, Math.max(toNumber(room.confidence, 0.7), best.label.confidence)).toFixed(2)),
       source: 'opencv-wall-grid-with-ocr-semantics',
+      ...(ocrLabelNeedsReview ? { semanticNeedsReview: true } : {}),
       sourceEvidence: {
         ...(room.sourceEvidence || {}),
+        ...(ocrLabelNeedsReview ? { semanticNeedsReview: true, ocrLabelNeedsReview: true } : {}),
         ocrText: best.label.text,
         ocrSource: best.label.source,
         ocrCandidateId: best.label.candidateId,
@@ -4397,11 +4400,14 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     .filter(hasExplicitSemanticEvidence)
     .map((room) => room.name || room.id)
     .filter(Boolean);
+  const partialOcrLabelRooms = list.filter((room) => room?.sourceEvidence?.ocrLabelNeedsReview);
   return {
     roomCount: list.length,
     ocrCandidateCount: ocrCandidates.length,
     ocrGroundedRoomCount: ocrGrounded,
     ocrGroundedRoomNames,
+    partialOcrLabelCount: partialOcrLabelRooms.length,
+    partialOcrLabelRoomNames: partialOcrLabelRooms.map((room) => room.name || room.id).filter(Boolean),
     templateOnlyRoomCount: templateOnly,
     layoutCountInferredRoomCount: layoutCountInferred,
     namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamedRooms.length,
