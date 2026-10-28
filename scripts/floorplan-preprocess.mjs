@@ -213,7 +213,7 @@ def extract_ocr_candidates(image_path):
     attempts = []
     room_label_pattern = re.compile(r"^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九0-9]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间)$")
     def is_room_label(text):
-        cleaned = re.sub(r"^[|.,:;，。；：、!！?？\\\"'“”‘’()（）【】{}]+|[|.,:;，。；：、!！?？\\\"'“”‘’()（）【】{}]+$", "", str(text or "").strip())
+        cleaned = str(text or "").strip().strip("|.,:;，。；：、!！?？“”‘’()（）{}")
         return bool(room_label_pattern.fullmatch(cleaned))
 
     def parse_tsv(tsv, language, psm, scale=1.0):
