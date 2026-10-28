@@ -4365,6 +4365,42 @@ function summarizeSourceAsset(localSourceFile) {
   };
 }
 
+function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
+  const list = Array.isArray(rooms) ? rooms : [];
+  const ocrCandidates = Array.isArray(preprocessing?.ocrCandidates) ? preprocessing.ocrCandidates : [];
+  const ocrGrounded = list.filter((room) => Boolean(
+    room?.sourceEvidence?.ocrCandidateId || room?.sourceEvidence?.ocrText
+  )).length;
+  const templateOnly = list.filter((room) => Boolean(
+    room?.sourceEvidence?.semanticTemplateOnly
+    || room?.sourceEvidence?.boundaryNeedsReview
+    || String(room?.source || '').includes('layout-template')
+  )).length;
+  const layoutCountInferred = list.filter((room) => Boolean(
+    room?.sourceEvidence?.layoutCountAssigned
+    || String(room?.source || '').includes('layout-count-semantics')
+  )).length;
+  const ungroundedNamed = list.filter((room) => Boolean(room?.name)
+    && !room?.sourceEvidence?.ocrCandidateId
+    && !room?.sourceEvidence?.ocrText
+    && !room?.sourceEvidence?.semanticTemplateOnly
+    && !room?.sourceEvidence?.layoutCountAssigned
+    && !String(room?.source || '').includes('layout-count-semantics')
+    && !String(room?.source || '').includes('layout-template')).length;
+  return {
+    roomCount: list.length,
+    ocrCandidateCount: ocrCandidates.length,
+    ocrGroundedRoomCount: ocrGrounded,
+    templateOnlyRoomCount: templateOnly,
+    layoutCountInferredRoomCount: layoutCountInferred,
+    namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamed,
+    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0,
+    note: ocrCandidates.length === 0
+      ? 'No OCR text candidates were produced; room names may be inferred from layout heuristics and must not be treated as image-confirmed.'
+      : 'OCR-derived labels are tracked separately from template/layout-count inference.'
+  };
+}
+
 function buildRecognitionDraft(job, preprocessing = null) {
   const parseResult = job?.floor_plan?.parse_result || {};
   const hasParseResult = hasUsableParseRooms(parseResult);
@@ -4449,6 +4485,10 @@ function buildRecognitionDraft(job, preprocessing = null) {
       : rooms.some((room) => room.source === 'layout-template-supplemental' || room.source === 'opencv-wall-grid-with-review-semantics') ? 0.68
       : sourceType === 'hand_drawn' ? 0.58 : 0.7;
   const issues = collectIssues({ sourceType, rooms, hasParseResult, preprocessing });
+  const semanticEvidenceAudit = summarizeRoomSemanticEvidence(rooms, preprocessing);
+  if (semanticEvidenceAudit.ocrCandidateCount === 0 && semanticEvidenceAudit.roomCount > 0) {
+    issues.push('语义证据审计：本次未产生 OCR 文本候选，房间名称可能来自布局启发式推断，不能视为图像文字已确认。');
+  }
   const floorplanModel = buildFloorplanModel({
     preprocessing,
     rooms,
@@ -4518,6 +4558,7 @@ function buildRecognitionDraft(job, preprocessing = null) {
       recognitionAssetMatchCount: preprocessing?.recognitionAssets?.matchedCandidateCount || 0,
       excludedAnnotationLineCount: preprocessing?.recognitionAssets?.excludedAnnotationLineCount || 0,
       geometryRoomCandidateCount: geometryRooms.length,
+      semanticEvidenceAudit: summarizeRoomSemanticEvidence(rooms, preprocessing),
       candidateContourCount: preprocessing?.geometryCandidates?.contours?.length || 0,
       needsReview: !(hasParseResult && hasParseWalls) || geometryConfidence < 0.75 || rooms.length <= 1,
       semanticFallback: rooms.some((room) => room.source === 'layout-template-from-plan-labels')
