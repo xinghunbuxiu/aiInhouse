@@ -173,7 +173,7 @@ function buildCompressedImage(sourcePath, outputDir) {
 
 function runPythonVision(sourcePath, outputDir) {
   const script = `
-import json, math, sys, csv, io, shutil, subprocess
+import json, math, sys, csv, io, shutil, subprocess, os, tempfile
 try:
     import cv2
     import numpy as np
@@ -211,7 +211,7 @@ def extract_ocr_candidates(image_path):
         return [], {"available": False, "engine": "tesseract", "error": "tesseract_not_installed", "attempts": []}
 
     attempts = []
-    def parse_tsv(tsv, language, psm):
+    def parse_tsv(tsv, language, psm, scale=1.0):
         grouped = {}
         for row in csv.DictReader(io.StringIO(tsv), delimiter="\\t"):
             if row.get("level") != "5":
@@ -219,8 +219,8 @@ def extract_ocr_candidates(image_path):
             text = (row.get("text") or "").strip()
             try:
                 confidence = float(row.get("conf") or -1)
-                x, y = int(row.get("left") or 0), int(row.get("top") or 0)
-                width, height = int(row.get("width") or 0), int(row.get("height") or 0)
+                x, y = int(row.get("left") or 0) / scale, int(row.get("top") or 0) / scale
+                width, height = int(row.get("width") or 0) / scale, int(row.get("height") or 0) / scale
                 line_key = (row.get("block_num"), row.get("par_num"), row.get("line_num"))
             except (TypeError, ValueError):
                 continue
@@ -249,19 +249,40 @@ def extract_ocr_candidates(image_path):
             })
         return candidates
 
+    variant_files = []
+    variants = [(image_path, 1.0, 11), (image_path, 1.0, 12)]
+    try:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        enlarged = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        adaptive = cv2.adaptiveThreshold(enlarged, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9)
+        enhanced_file = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-", suffix=".png", delete=False)
+        enhanced_file.close()
+        cv2.imwrite(enhanced_file.name, adaptive)
+        variant_files.append(enhanced_file.name)
+        variants.append((enhanced_file.name, 2.0, 12))
+
+        enlarged3 = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        enhanced3_file = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-", suffix=".png", delete=False)
+        enhanced3_file.close()
+        cv2.imwrite(enhanced3_file.name, enlarged3)
+        variant_files.append(enhanced3_file.name)
+        variants.append((enhanced3_file.name, 3.0, 11))
+    except Exception as exc:
+        attempts.append({"stage": "enhanced-image-preparation", "error": str(exc)})
+
     for language in ("chi_sim+eng", "eng"):
         combined = []
-        for psm in (11, 12):
+        for variant_path, scale, psm in variants:
             try:
-                result = subprocess.run([binary, image_path, "stdout", "-l", language, "--psm", str(psm), "tsv"],
+                result = subprocess.run([binary, variant_path, "stdout", "-l", language, "--psm", str(psm), "tsv"],
                     capture_output=True, text=True, timeout=35, check=False)
             except Exception as exc:
-                attempts.append({"language": language, "psm": psm, "error": str(exc)})
+                attempts.append({"language": language, "psm": psm, "scale": scale, "error": str(exc)})
                 continue
             if result.returncode != 0:
-                attempts.append({"language": language, "psm": psm, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
+                attempts.append({"language": language, "psm": psm, "scale": scale, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
                 continue
-            combined.extend(parse_tsv(result.stdout, language, psm))
+            combined.extend(parse_tsv(result.stdout, language, psm, scale))
 
         # Merge only spatially overlapping detections; prefer longer text at the same location,
         # then confidence. Keep distinct nearby labels as separate evidence.
@@ -286,9 +307,16 @@ def extract_ocr_candidates(image_path):
         if merged:
             return merged, {
                 "available": True, "engine": "tesseract", "language": language,
-                "pageSegmentationModes": [11, 12], "candidateCount": len(merged), "attempts": attempts
+                "variants": [{"scale": scale, "pageSegmentationMode": psm} for _, scale, psm in variants],
+                "candidateCount": len(merged), "attempts": attempts
             }
     return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
+finally:
+    for variant_file in variant_files:
+        try:
+            os.remove(variant_file)
+        except OSError:
+            pass
 
 ocr_candidates, ocr_status = extract_ocr_candidates(image_path)
 
