@@ -305,18 +305,22 @@ def extract_ocr_candidates(image_path):
                     merged[match_index] = candidate
 
         if merged:
+            for variant_file in variant_files:
+                try:
+                    os.remove(variant_file)
+                except OSError:
+                    pass
             return merged, {
                 "available": True, "engine": "tesseract", "language": language,
                 "variants": [{"scale": scale, "pageSegmentationMode": psm} for _, scale, psm in variants],
                 "candidateCount": len(merged), "attempts": attempts
             }
-    return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
-finally:
     for variant_file in variant_files:
         try:
             os.remove(variant_file)
         except OSError:
             pass
+    return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
 
 ocr_candidates, ocr_status = extract_ocr_candidates(image_path)
 
