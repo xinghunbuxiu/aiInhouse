@@ -100,6 +100,10 @@ assert(appearanceDraft.quality?.semanticEvidenceAudit?.ocrCandidateCount === 0,
 assert(typeof appearanceDraft.quality?.semanticEvidenceAudit?.note === 'string'
   && appearanceDraft.quality.semanticEvidenceAudit.note.includes('must not be treated as image-confirmed'),
   'Recognition results must warn that template/layout-inferred room names are not image-confirmed when OCR is absent.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.ocrGroundedRoomNames),
+  'Semantic evidence audit must list OCR-grounded room names, not only aggregate counts.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.namedRoomsWithoutExplicitSemanticEvidence),
+  'Semantic evidence audit must identify room names that still lack explicit image-text evidence.');
 
 
 // Regression: a room label must never jump across a wall into a neighboring room.
