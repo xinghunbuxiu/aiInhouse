@@ -205,23 +205,15 @@ edges = cv2.Canny(blur, 50, 150, apertureSize=3)
 lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=70, minLineLength=max(30, min(w, h) // 18), maxLineGap=10)
 
 def extract_ocr_candidates(image_path):
-    """Extract text-line boxes using Tesseract when installed; never fabricate labels."""
+    """Extract OCR text-line boxes with multiple segmentation modes and preserve source evidence."""
     binary = shutil.which("tesseract")
     if not binary:
         return [], {"available": False, "engine": "tesseract", "error": "tesseract_not_installed", "attempts": []}
+
     attempts = []
-    for language in ("chi_sim+eng", "eng"):
-        try:
-            result = subprocess.run([binary, image_path, "stdout", "-l", language, "--psm", "11", "tsv"],
-                capture_output=True, text=True, timeout=35, check=False)
-        except Exception as exc:
-            attempts.append({"language": language, "error": str(exc)})
-            continue
-        if result.returncode != 0:
-            attempts.append({"language": language, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
-            continue
+    def parse_tsv(tsv, language, psm):
         grouped = {}
-        for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\t"):
+        for row in csv.DictReader(io.StringIO(tsv), delimiter="\\t"):
             if row.get("level") != "5":
                 continue
             text = (row.get("text") or "").strip()
@@ -247,15 +239,55 @@ def extract_ocr_candidates(image_path):
             if not text:
                 continue
             candidates.append({
-                "id": "tesseract-line-%d" % (index + 1), "text": text,
+                "id": "tesseract-psm%d-line-%d" % (psm, index + 1), "text": text,
                 "x": item["x1"], "y": item["y1"],
                 "width": item["x2"] - item["x1"], "height": item["y2"] - item["y1"],
                 "center": {"x": (item["x1"] + item["x2"]) / 2, "y": (item["y1"] + item["y2"]) / 2},
                 "confidence": round(sum(item["confidences"]) / max(len(item["confidences"]), 1) / 100, 3),
-                "source": "tesseract:%s" % language,
-                "evidence": {"engine": "tesseract", "language": language, "wordCount": len(item["parts"])}
+                "source": "tesseract:%s:psm%d" % (language, psm),
+                "evidence": {"engine": "tesseract", "language": language, "pageSegmentationMode": psm, "wordCount": len(item["parts"])}
             })
-        return candidates, {"available": True, "engine": "tesseract", "language": language, "candidateCount": len(candidates), "attempts": attempts}
+        return candidates
+
+    for language in ("chi_sim+eng", "eng"):
+        combined = []
+        for psm in (11, 12):
+            try:
+                result = subprocess.run([binary, image_path, "stdout", "-l", language, "--psm", str(psm), "tsv"],
+                    capture_output=True, text=True, timeout=35, check=False)
+            except Exception as exc:
+                attempts.append({"language": language, "psm": psm, "error": str(exc)})
+                continue
+            if result.returncode != 0:
+                attempts.append({"language": language, "psm": psm, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
+                continue
+            combined.extend(parse_tsv(result.stdout, language, psm))
+
+        # Merge only spatially overlapping detections; prefer longer text at the same location,
+        # then confidence. Keep distinct nearby labels as separate evidence.
+        merged = []
+        for candidate in sorted(combined, key=lambda item: (item["center"]["y"], item["center"]["x"])):
+            match_index = None
+            for index, existing in enumerate(merged):
+                dx = abs(candidate["center"]["x"] - existing["center"]["x"])
+                dy = abs(candidate["center"]["y"] - existing["center"]["y"])
+                overlap_x = min(candidate["x"] + candidate["width"], existing["x"] + existing["width"]) - max(candidate["x"], existing["x"])
+                overlap_y = min(candidate["y"] + candidate["height"], existing["y"] + existing["height"]) - max(candidate["y"], existing["y"])
+                if dx <= 16 and dy <= max(12, min(candidate["height"], existing["height"])) and overlap_x > 0 and overlap_y > 0:
+                    match_index = index
+                    break
+            if match_index is None:
+                merged.append(candidate)
+            else:
+                existing = merged[match_index]
+                if (len(candidate["text"]), candidate["confidence"]) > (len(existing["text"]), existing["confidence"]):
+                    merged[match_index] = candidate
+
+        if merged:
+            return merged, {
+                "available": True, "engine": "tesseract", "language": language,
+                "pageSegmentationModes": [11, 12], "candidateCount": len(merged), "attempts": attempts
+            }
     return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
 
 ocr_candidates, ocr_status = extract_ocr_candidates(image_path)
