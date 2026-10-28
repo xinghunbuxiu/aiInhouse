@@ -284,7 +284,10 @@ def sample_line_appearance(start, end, thickness):
     center_luma = []
     neighborhood_luma = []
     color_samples = []
-    half_width = max(2, min(8, int(max(1, thickness) / 2)))
+    # Use the measured band thickness to step beyond the candidate itself.
+    # A fixed 8 px cap can leave the "background" sample inside thick walls.
+    half_width = max(2, min(32, int(math.ceil(max(1.0, float(thickness)) / 2.0))))
+    background_sample_offset = half_width + 3
     for index in range(31):
         t = index / 30.0
         sx = int(round(x1 + (x2 - x1) * t))
@@ -297,7 +300,7 @@ def sample_line_appearance(start, end, thickness):
         nx = -(y2 - y1) / length
         ny = (x2 - x1) / length
         for sign in (-1, 1):
-            bx = min(w - 1, max(0, int(round(sx + sign * nx * (half_width + 3)))))
+            bx = min(w - 1, max(0, int(round(sx + sign * nx * background_sample_offset))))
             by = min(h - 1, max(0, int(round(sy + sign * ny * (half_width + 3)))))
             neighborhood_luma.append(float(gray[by, bx]))
     if not center_luma:
@@ -313,6 +316,8 @@ def sample_line_appearance(start, end, thickness):
         "darkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 150)), 4),
         "veryDarkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 95)), 4),
         "nearbyBackgroundLuminance": round(background_mean, 2),
+        "backgroundSampleOffset": background_sample_offset,
+        "backgroundSampleCount": len(neighborhood_luma),
         "centerBackgroundContrast": round(abs(center_mean - background_mean), 2),
         "meanBGR": [round(float(value), 2) for value in np.mean(colors, axis=0)],
         "sampleCount": len(center_luma),
