@@ -274,6 +274,51 @@ if lines is not None:
             "appearance": appearance
         })
 
+def sample_line_appearance(start, end, thickness):
+    # Sample the source raster along morphology-derived wall-band candidates too.
+    # Hough lines already carry appearance data; without this shared sampler,
+    # the stronger structural candidates lose the light/dark/color evidence.
+    x1, y1 = float(start["x"]), float(start["y"])
+    x2, y2 = float(end["x"]), float(end["y"])
+    length = max(1.0, math.hypot(x2 - x1, y2 - y1))
+    center_luma = []
+    neighborhood_luma = []
+    color_samples = []
+    half_width = max(2, min(8, int(max(1, thickness) / 2)))
+    for index in range(31):
+        t = index / 30.0
+        sx = int(round(x1 + (x2 - x1) * t))
+        sy = int(round(y1 + (y2 - y1) * t))
+        if not (0 <= sx < w and 0 <= sy < h):
+            continue
+        center_luma.append(float(gray[sy, sx]))
+        color_samples.append(image[sy, sx].astype(float))
+        # Sample both sides of the candidate stroke as local background evidence.
+        nx = -(y2 - y1) / length
+        ny = (x2 - x1) / length
+        for sign in (-1, 1):
+            bx = min(w - 1, max(0, int(round(sx + sign * nx * (half_width + 3)))))
+            by = min(h - 1, max(0, int(round(sy + sign * ny * (half_width + 3)))))
+            neighborhood_luma.append(float(gray[by, bx]))
+    if not center_luma:
+        return None
+    colors = np.asarray(color_samples) if color_samples else np.zeros((1, 3))
+    center_mean = float(np.mean(center_luma))
+    background_mean = float(np.mean(neighborhood_luma)) if neighborhood_luma else 255.0
+    return {
+        "colorSpace": "gray+luminance+meanBGR",
+        "meanLuminance": round(center_mean, 2),
+        "medianLuminance": round(float(np.median(center_luma)), 2),
+        "luminanceStdDev": round(float(np.std(center_luma)), 2),
+        "darkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 150)), 4),
+        "veryDarkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 95)), 4),
+        "nearbyBackgroundLuminance": round(background_mean, 2),
+        "centerBackgroundContrast": round(abs(center_mean - background_mean), 2),
+        "meanBGR": [round(float(value), 2) for value in np.mean(colors, axis=0)],
+        "sampleCount": len(center_luma),
+        "interpretation": "appearance evidence only; not a wall/object label"
+    }
+
 def extract_axis_candidates(mask, orientation):
     if orientation == "horizontal":
         kernel_size = (max(24, w // 28), 5)
@@ -308,7 +353,8 @@ def extract_axis_candidates(mask, orientation):
             "orientation": orientation,
             "source": "morphology-wall-band",
             "thickness": int(max(6, thickness)),
-            "confidence": round(0.68 + min(0.22, length / max(w, h) * 0.32), 3)
+            "confidence": round(0.68 + min(0.22, length / max(w, h) * 0.32), 3),
+            "appearance": sample_line_appearance(start, end, thickness)
         })
     return candidates
 
