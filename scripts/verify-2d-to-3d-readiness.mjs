@@ -74,6 +74,28 @@ function makeWallGridPreprocess() {
   };
 }
 
+// Regression: raster appearance must survive from preprocessing into the final
+// wall evidence used by topology diagnostics; it must not become a semantic label.
+const appearancePreprocess = makeWallGridPreprocess();
+appearancePreprocess.geometryCandidates.lines[0].appearance = {
+  meanLuminance: 18.5,
+  centerBackgroundContrast: 142.2,
+  darkPixelRatio: 0.91,
+  meanBGR: [18.5, 19.1, 20.0],
+  sampleCount: 31,
+  interpretation: 'appearance evidence only; not a wall/object label'
+};
+const appearanceDraft = buildRecognitionDraft({
+  job: { source_type: 'digital' },
+  house: {},
+  floor_plan: {}
+}, appearancePreprocess);
+const appearanceWall = appearanceDraft.walls.find((wall) => wall.sourceCandidateId === appearancePreprocess.geometryCandidates.lines[0].id);
+assert(appearanceWall?.sourceEvidence?.appearance?.meanLuminance === 18.5,
+  'Wall topology diagnostics must retain measured raster appearance from the source line.');
+assert(appearanceWall?.sourceEvidence?.appearance?.interpretation.includes('not a wall/object label'),
+  'Appearance evidence must explicitly remain non-semantic.');
+
 // Regression: a room label must never jump across a wall into a neighboring room.
 const adjacentRooms = assignOcrSemantics([
   { id: 'elevator-shaft', name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.7 },
