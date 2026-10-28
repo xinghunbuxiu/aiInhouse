@@ -173,7 +173,7 @@ function buildCompressedImage(sourcePath, outputDir) {
 
 function runPythonVision(sourcePath, outputDir) {
   const script = `
-import json, math, sys
+import json, math, sys, csv, io, shutil, subprocess
 try:
     import cv2
     import numpy as np
@@ -203,6 +203,62 @@ structural_wall_seed = cv2.bitwise_or(structural_horizontal, structural_vertical
 structural_wall_seed = cv2.morphologyEx(structural_wall_seed, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9)), iterations=1)
 edges = cv2.Canny(blur, 50, 150, apertureSize=3)
 lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=70, minLineLength=max(30, min(w, h) // 18), maxLineGap=10)
+
+def extract_ocr_candidates(image_path):
+    """Extract text-line boxes using Tesseract when installed; never fabricate labels."""
+    binary = shutil.which("tesseract")
+    if not binary:
+        return [], {"available": False, "engine": "tesseract", "error": "tesseract_not_installed", "attempts": []}
+    attempts = []
+    for language in ("chi_sim+eng", "eng"):
+        try:
+            result = subprocess.run([binary, image_path, "stdout", "-l", language, "--psm", "11", "tsv"],
+                capture_output=True, text=True, timeout=35, check=False)
+        except Exception as exc:
+            attempts.append({"language": language, "error": str(exc)})
+            continue
+        if result.returncode != 0:
+            attempts.append({"language": language, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
+            continue
+        grouped = {}
+        for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\\t"):
+            if row.get("level") != "5":
+                continue
+            text = (row.get("text") or "").strip()
+            try:
+                confidence = float(row.get("conf") or -1)
+                x, y = int(row.get("left") or 0), int(row.get("top") or 0)
+                width, height = int(row.get("width") or 0), int(row.get("height") or 0)
+                line_key = (row.get("block_num"), row.get("par_num"), row.get("line_num"))
+            except (TypeError, ValueError):
+                continue
+            if not text or confidence < 20 or width <= 0 or height <= 0:
+                continue
+            item = grouped.setdefault(line_key, {"parts": [], "x1": x, "y1": y, "x2": x + width, "y2": y + height, "confidences": []})
+            item["parts"].append(text)
+            item["x1"], item["y1"] = min(item["x1"], x), min(item["y1"], y)
+            item["x2"], item["y2"] = max(item["x2"], x + width), max(item["y2"], y + height)
+            item["confidences"].append(confidence)
+        candidates = []
+        for index, item in enumerate(grouped.values()):
+            joined = "".join(item["parts"])
+            text = joined if any(ord(char) > 127 for char in joined) else " ".join(item["parts"])
+            text = text.strip()
+            if not text:
+                continue
+            candidates.append({
+                "id": "tesseract-line-%d" % (index + 1), "text": text,
+                "x": item["x1"], "y": item["y1"],
+                "width": item["x2"] - item["x1"], "height": item["y2"] - item["y1"],
+                "center": {"x": (item["x1"] + item["x2"]) / 2, "y": (item["y1"] + item["y2"]) / 2},
+                "confidence": round(sum(item["confidences"]) / max(len(item["confidences"]), 1) / 100, 3),
+                "source": "tesseract:%s" % language,
+                "evidence": {"engine": "tesseract", "language": language, "wordCount": len(item["parts"])}
+            })
+        return candidates, {"available": True, "engine": "tesseract", "language": language, "candidateCount": len(candidates), "attempts": attempts}
+    return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
+
+ocr_candidates, ocr_status = extract_ocr_candidates(image_path)
 
 line_items = []
 if lines is not None:
@@ -2326,7 +2382,7 @@ print(json.dumps({
         "annotationSymbolCandidateCount": len(annotation_symbol_candidates),
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
-    "ocrCandidates": [],
+    "ocrCandidates": ocr_candidates,\n    "ocrStatus": ocr_status,
     "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "wallJunctionOverlay": debug_wall_junction_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
@@ -2415,6 +2471,7 @@ function buildPayload(job, sourcePath, outputDir) {
       ...(job?.job?.input_payload?.ocrCandidates || []),
       ...(job?.job?.input_payload?.roomLabels || [])
     ],
+    ocrStatus: vision.ocrStatus || { available: false, error: 'vision_unavailable' },
     debugImages: vision.debugImages || {},
     visionAvailable: Boolean(vision.available),
     visionPythonCommand: vision.pythonCommand || '',
