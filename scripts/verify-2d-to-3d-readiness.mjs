@@ -116,6 +116,21 @@ const adjacentRooms = assignOcrSemantics([
 assert(adjacentRooms[0].name === '空间A', 'OCR labels outside a room must not relabel that room.');
 assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not turn an elevator/adjacent space into a bathroom.');
 assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
+
+const noisyOcrRoom = assignOcrSemantics([
+  { id: 'kitchen', name: '空间C', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-mixed-label', text: '门厅yy厨房', x: 20, y: 30, width: 60, height: 20, confidence: 0.95, source: 'tesseract' }
+]);
+assert(noisyOcrRoom[0].name === '空间C' && noisyOcrRoom[0].type === 'space',
+  'Mixed OCR lines containing multiple room keywords must not create or relabel a room.');
+const punctuatedOcrRoom = assignOcrSemantics([
+  { id: 'living-room', name: '空间D', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-living-punctuation', text: '客厅|', x: 20, y: 30, width: 30, height: 20, confidence: 0.95, source: 'tesseract' }
+]);
+assert(punctuatedOcrRoom[0].name === '客厅' && punctuatedOcrRoom[0].type === 'living',
+  'Punctuation around a single OCR room label may be trimmed without losing its geometry-grounded meaning.');
 assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
 assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
 const benchmarkAttachedCount = countBenchmarkAttachedOpenings([
