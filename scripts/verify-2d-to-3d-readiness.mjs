@@ -95,6 +95,12 @@ assert(appearanceWall?.sourceEvidence?.appearance?.meanLuminance === 18.5,
   'Wall topology diagnostics must retain measured raster appearance from the source line.');
 assert(appearanceWall?.sourceEvidence?.appearance?.interpretation.includes('not a wall/object label'),
   'Appearance evidence must explicitly remain non-semantic.');
+assert(appearanceDraft.quality?.semanticEvidenceAudit?.ocrCandidateCount === 0,
+  'Recognition results must report when no OCR text candidates were produced.');
+assert(typeof appearanceDraft.quality?.semanticEvidenceAudit?.note === 'string'
+  && appearanceDraft.quality.semanticEvidenceAudit.note.includes('must not be treated as image-confirmed'),
+  'Recognition results must warn that template/layout-inferred room names are not image-confirmed when OCR is absent.');
+
 
 // Regression: a room label must never jump across a wall into a neighboring room.
 const adjacentRooms = assignOcrSemantics([
