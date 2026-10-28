@@ -4,6 +4,10 @@
 
 A strong multimodal model can interpret symbols and spatial context, but it should not be treated as a CAD engine or a source of exact measurements. Keep visual interpretation, geometry extraction, validation, and rendering as separate responsibilities.
 
+## Visual design diagram
+
+![AIInhouse floor-plan to 3D panorama pipeline](./assets/floorplan-pipeline-design.svg)
+
 ## Recommended pipeline
 
 1. **Normalize the source**: preserve the original image; deskew, denoise, improve contrast, and retain a mapping from processed pixels back to source coordinates. For PDFs, extract the embedded text layer before OCR.
