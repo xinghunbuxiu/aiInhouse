@@ -2331,7 +2331,18 @@ def augment_ocr_from_region_crops(candidates, regions):
             continue
     return results, {"regionCropCount": crops, "regionLabelCount": found, "regionSource": "room-interior-and-balcony-candidates"}
 
-ocr_candidates, region_ocr_status = augment_ocr_from_region_crops(ocr_candidates, room_interior_candidates + balcony_candidates)
+expanded_balcony_ocr_regions = [
+    {**region,
+     "x": max(0, int(region["x"] - region["width"])),
+     "y": max(0, int(region["y"] - region["height"])),
+     "width": int(region["width"] * 3),
+     "height": int(region["height"] * 3),
+     "source": "expanded-" + str(region.get("source", "balcony-candidate"))}
+    for region in balcony_candidates
+]
+ocr_candidates, region_ocr_status = augment_ocr_from_region_crops(
+    ocr_candidates, room_interior_candidates + expanded_balcony_ocr_regions
+)
 ocr_status["regionOcr"] = region_ocr_status
 ocr_status["candidateCount"] = len(ocr_candidates)
 
