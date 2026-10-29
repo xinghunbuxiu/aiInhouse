@@ -2301,7 +2301,7 @@ def augment_ocr_from_region_crops(candidates, regions):
                             continue
                         confidence = round(sum(item["conf"]) / max(1, len(item["conf"])) / 100, 3)
                         cx = x + (item["x1"] + item["x2"]) / 6.0 - 8
-                        cy = y + (item["y1"] + item["y2"]) / 6.0 - 8
+                        cy = y + (item["y1"] + item["y2"]) / 6.0 - 8/3
                         key = (joined, round(cx / 8), round(cy / 8))
                         if key in seen:
                             continue
