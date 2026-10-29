@@ -2,15 +2,26 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import { countVerifiedAttachedOpenings as countBenchmarkAttachedOpenings, summarizeBenchmark } from './benchmark-kujiale-structure-recognition.mjs';
+import { collectCandidates, parseLayout as parseBatchLayout, countVerifiedAttachedOpenings as countBatchAttachedOpenings } from './batch-recognition-sample.mjs';
 
 const require = createRequire(import.meta.url);
-const { buildRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
+const { buildRecognitionDraft, assignOcrSemantics, finalizeRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
+const { buildSpatialGraph, validateFloorplanDraft } = require('../codex-worker/src/recognizers/spatial-reasoning.js');
+const { buildRecoveryPrompt, normalizeRecognitionDraft } = require('../codex-worker/src/recognizers/ai-command.js');
 
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function assertThrows(fn, message) {
+  let threw = false;
+  try { fn(); } catch (_) { threw = true; }
+  assert(threw, message);
 }
 
 function makeTemplateOnlyPreprocess() {
@@ -63,6 +74,433 @@ function makeWallGridPreprocess() {
   };
 }
 
+// Regression: raster appearance must survive from preprocessing into the final
+// wall evidence used by topology diagnostics; it must not become a semantic label.
+const appearancePreprocess = makeWallGridPreprocess();
+appearancePreprocess.geometryCandidates.lines[0].appearance = {
+  meanLuminance: 18.5,
+  centerBackgroundContrast: 142.2,
+  darkPixelRatio: 0.91,
+  meanBGR: [18.5, 19.1, 20.0],
+  sampleCount: 31,
+  interpretation: 'appearance evidence only; not a wall/object label'
+};
+const appearanceDraft = buildRecognitionDraft({
+  job: { source_type: 'digital' },
+  house: {},
+  floor_plan: {}
+}, appearancePreprocess);
+const appearanceWall = appearanceDraft.walls.find((wall) => wall.sourceCandidateId === appearancePreprocess.geometryCandidates.lines[0].id);
+assert(appearanceWall?.sourceEvidence?.appearance?.meanLuminance === 18.5,
+  'Wall topology diagnostics must retain measured raster appearance from the source line.');
+assert(appearanceWall?.sourceEvidence?.appearance?.interpretation.includes('not a wall/object label'),
+  'Appearance evidence must explicitly remain non-semantic.');
+assert(appearanceDraft.quality?.semanticEvidenceAudit?.ocrCandidateCount === 0,
+  'Recognition results must report when no OCR text candidates were produced.');
+assert(typeof appearanceDraft.quality?.semanticEvidenceAudit?.note === 'string'
+  && appearanceDraft.quality.semanticEvidenceAudit.note.includes('must not be treated as image-confirmed'),
+  'Recognition results must warn that template/layout-inferred room names are not image-confirmed when OCR is absent.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.ocrGroundedRoomNames),
+  'Semantic evidence audit must list OCR-grounded room names, not only aggregate counts.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.namedRoomsWithoutExplicitSemanticEvidence),
+  'Semantic evidence audit must identify room names that still lack explicit image-text evidence.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.unassignedOcrRoomLabels),
+  'Semantic evidence audit must list recognized room labels that were not assigned to output rooms.');
+assert(typeof appearanceDraft.quality?.semanticEvidenceAudit?.roomGeometryFullyImageGrounded === 'boolean',
+  'Room geometry grounding must be reported separately from OCR label grounding.');
+
+
+// Regression: a room label must never jump across a wall into a neighboring room.
+const adjacentRooms = assignOcrSemantics([
+  { id: 'elevator-shaft', name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.7 },
+  { id: 'bathroom', name: '空间B', type: 'space', x: 110, y: 0, width: 100, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-bathroom-1', text: '卫生间', x: 115, y: 40, width: 10, height: 20, confidence: 0.95, source: 'opencv-ocr' }
+]);
+assert(adjacentRooms[0].name === '空间A', 'OCR labels outside a room must not relabel that room.');
+assert(adjacentRooms[0].type === 'space', 'A neighboring bathroom label must not turn an elevator/adjacent space into a bathroom.');
+assert(adjacentRooms[1].name === '卫生间', 'The OCR label should be assigned to the room containing its text center.');
+
+const noisyOcrRoom = assignOcrSemantics([
+  { id: 'kitchen', name: '空间C', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-mixed-label', text: '门厅yy厨房', x: 20, y: 30, width: 60, height: 20, confidence: 0.95, source: 'tesseract' }
+]);
+assert(noisyOcrRoom[0].name === '空间C' && noisyOcrRoom[0].type === 'space',
+  'Mixed OCR lines containing multiple room keywords must not create or relabel a room.');
+const punctuatedOcrRoom = assignOcrSemantics([
+  { id: 'living-room', name: '空间D', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-living-punctuation', text: '客厅|', x: 20, y: 30, width: 30, height: 20, confidence: 0.95, source: 'tesseract' }
+]);
+assert(punctuatedOcrRoom[0].name === '客厅' && punctuatedOcrRoom[0].type === 'living',
+  'Punctuation around a single OCR room label may be trimmed without losing its geometry-grounded meaning.');
+const shorthandBedroomLabel = assignOcrSemantics([
+  { id: 'child-bedroom', name: '空间E', type: 'space', x: 0, y: 0, width: 120, height: 100, confidence: 0.7 }
+], [
+  { id: 'ocr-boy-bedroom', text: '男孩卧', x: 20, y: 30, width: 30, height: 20, confidence: 0.9, source: 'tesseract' }
+]);
+assert(shorthandBedroomLabel[0].name === '男孩卧'
+  && shorthandBedroomLabel[0].sourceEvidence?.ocrText === '男孩卧'
+  && !shorthandBedroomLabel[0].sourceEvidence?.ocrLabelNeedsReview,
+  'A room label that is visibly written as 男孩卧 must be preserved as exact OCR text, not assumed to be missing 室.');
+assert(adjacentRooms[1].sourceEvidence.ocrCandidateId === 'ocr-bathroom-1', 'Assigned room semantics must preserve the originating OCR candidate ID.');
+assert(adjacentRooms[1].sourceEvidence.ocrBox.width === 10 && adjacentRooms[1].sourceEvidence.ocrBox.height === 20, 'Assigned room semantics must preserve the OCR box in image coordinates.');
+const benchmarkAttachedCount = countBenchmarkAttachedOpenings([
+  { id: 'known-good', attachedWallId: 'wall-1' },
+  { id: 'no-wall-reference' },
+  { id: 'stale-wall-reference', attachedWallId: 'wall-deleted' },
+  { id: 'pending-review', attachedWallId: 'wall-1', needsWallAttachmentReview: true }
+], [{ id: 'wall-1' }]);
+assert(benchmarkAttachedCount === 1, 'Benchmark must count only openings with an explicit existing wall reference and no review flag.');
+const candidateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'floorplan-image-input-'));
+const candidateImage = path.join(candidateRoot, 'actual-floor-plan.png');
+fs.writeFileSync(candidateImage, 'test-image-placeholder');
+assert(collectCandidates({ imagePath: candidateImage }).length === 1, 'Batch recognition must accept one explicit floor-plan image path for real-image testing.');
+assert(collectCandidates({ imagePath: candidateImage })[0] === candidateImage, 'Explicit image input must be passed through without silently substituting another sample.');
+assert(parseBatchLayout(candidateImage, '3室2厅1厨2卫').layout === '3室2厅1厨2卫', 'Explicit ground-truth layout must override an unlabeled filename for actual floor-plan evaluation.');
+assertThrows(() => collectCandidates({ imagePath: path.join(candidateRoot, 'missing.png') }), 'Missing explicit image paths must fail clearly.');
+fs.rmSync(candidateRoot, { recursive: true, force: true });
+
+assert(countBatchAttachedOpenings([
+  { id: 'verified', attachedWallId: 'w1' },
+  { id: 'missing-ref' },
+  { id: 'unknown-ref', attachedWallId: 'w404' },
+  { id: 'review', attachedWallId: 'w1', needsWallAttachmentReview: true }
+], [{ id: 'w1' }]) === 1, 'Batch evaluation must count only openings explicitly attached to an existing wall and not flagged for review.');
+
+const noGroundTruthSummary = summarizeBenchmark([{
+  error: null,
+  expected: { layout: '' },
+  readinessStatus: 'unknown',
+  readinessScore: null
+}]);
+assert(noGroundTruthSummary.exactLayoutMatchRate === null, 'Missing labeled layout ground truth must produce N/A, not a false 0% accuracy.');
+const noValidSampleSummary = summarizeBenchmark([{ error: 'preprocess failed' }]);
+assert(noValidSampleSummary.commercialReadyRate === null, 'No valid benchmark samples must produce N/A, not a false 0% readiness rate.');
+
+// Recovery regression: weak first-pass drafts should be reviewed using the
+// complete initial draft, with explicit anti-hallucination constraints.
+const firstPassDraft = normalizeRecognitionDraft({
+  rooms: [{ name: '空间A', type: 'space', x: 0, y: 0, width: 100, height: 100, confidence: 0.4 }],
+  walls: [],
+  doors: [],
+  windows: [],
+  confidence: { geometry: 0.4, semantics: 0.4 }
+});
+assert(firstPassDraft.quality.needsReview, 'A weak first-pass result must trigger recovery.');
+const recoveryPrompt = buildRecoveryPrompt('原始户型识别任务', firstPassDraft);
+assert(recoveryPrompt.includes('第一次识别结果'), 'Recovery prompt must explicitly identify the first-pass draft.');
+assert(recoveryPrompt.includes('电梯井、管道井、设备平台'), 'Recovery prompt must protect special structural spaces.');
+assert(recoveryPrompt.includes(JSON.stringify(firstPassDraft, null, 2)), 'Recovery prompt must include the actual first-pass draft.');
+
+// Deterministic spatial-reasoning regressions: adjacency, overlapping rooms,
+// and doors that cannot be associated with any room.
+const spatialDraft = {
+  rooms: [
+    { id: 'entry', name: '玄关', type: 'entry', x: 0, y: 0, width: 100, height: 100, confidence: 0.9 },
+    { id: 'elevator', name: '电梯井', type: 'shaft', x: 100, y: 0, width: 60, height: 100, confidence: 0.95 },
+    { id: 'bathroom', name: '卫生间', type: 'bathroom', x: 180, y: 0, width: 80, height: 100, confidence: 0.88 }
+  ],
+  walls: [
+    { id: 'wall-1', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+    { id: 'wall-2', start: { x: 100, y: 0 }, end: { x: 160, y: 0 } }
+  ],
+  doors: [{ id: 'front-door', center: { x: 30, y: 50 } }]
+};
+const spatialGraph = buildSpatialGraph(spatialDraft);
+assert(spatialGraph.nodes.length === 3, 'Spatial graph must preserve each distinct space.');
+assert(spatialGraph.edges.some(edge => edge.from === 'entry' && edge.to === 'elevator'), 'Adjacent entry and elevator spaces should be represented in the graph.');
+assert(!spatialGraph.edges.some(edge => edge.from === 'entry' && edge.to === 'bathroom'), 'Non-adjacent rooms must not be connected by proximity alone.');
+assert(spatialGraph.doorConnections[0].connectedRoomIds.includes('entry'), 'The entry door must be associated with the entry room.');
+const overlapping = validateFloorplanDraft({
+  rooms: [
+    { id: 'a', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 },
+    { id: 'b', name: '卧室', type: 'bedroom', x: 50, y: 50, width: 100, height: 100 }
+  ],
+  walls: [{ id: 'bad-wall', start: { x: 2, y: 2 }, end: { x: 2, y: 2 } }],
+  doors: [{ id: 'lost-door', center: { x: 500, y: 500 } }]
+});
+assert(!overlapping.valid, 'Zero-length walls must fail geometry validation.');
+assert(overlapping.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Overlapping room bounds must be flagged for review.');
+assert(overlapping.issues.some(issue => issue.code === 'door-not-associated-with-room'), 'Doors outside all rooms must be flagged.');
+
+const missingCoordinate = validateFloorplanDraft({
+  rooms: [{ id: 'missing-x', name: '客厅', type: 'living', x: null, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'missing-point', start: { x: null, y: 0 }, end: { x: 10, y: 0 } }],
+  doors: []
+});
+assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-room-bounds'), 'Null room coordinates must not be coerced to zero.');
+assert(missingCoordinate.issues.some(issue => issue.code === 'invalid-wall-segment'), 'Null wall coordinates must be rejected.');
+
+const overlappingWallSegments = validateFloorplanDraft({
+  rooms: [{ id: 'overlap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'wall-run-a', start: { x: 0, y: 0 }, end: { x: 120, y: 0 }, sourceEvidence: { candidateId: 'line-a' } },
+    { id: 'wall-run-b', start: { x: 80, y: 1 }, end: { x: 180, y: 1 }, sourceEvidence: { candidateId: 'line-b' } },
+    { id: 'wall-separate', start: { x: 0, y: 40 }, end: { x: 120, y: 40 } }
+  ],
+  doors: [],
+  windows: []
+});
+const overlappingWallIssue = overlappingWallSegments.issues.find(issue => issue.code === 'overlapping-wall-segments');
+assert(overlappingWallIssue, 'Collinear wall runs with a meaningful shared span must be surfaced for topology review.');
+assert(overlappingWallIssue.entityId === 'wall-run-a' && overlappingWallIssue.relatedEntityId === 'wall-run-b', 'Overlapping wall diagnostics must identify both source wall entities.');
+assert(overlappingWallIssue.overlapLength === 40, 'Overlapping wall diagnostics must report the measured overlap length.');
+assert(overlappingWallIssue.entityEvidence?.[0]?.sourceEvidence?.candidateId === 'line-a', 'Overlap diagnostics must retain the originating wall evidence.');
+assert(!overlappingWallSegments.issues.some(issue => issue.code === 'overlapping-wall-segments' && issue.relatedEntityId === 'wall-separate'), 'Parallel walls on distinct axes must not be reported as overlapping.');
+
+const unexplainedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'gap-wall-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
+    { id: 'gap-wall-right', start: { x: 92, y: 1 }, end: { x: 180, y: 1 } }
+  ], doors: [], windows: []
+});
+const unexplainedGapIssue = unexplainedWallGap.issues.find(issue => issue.code === 'wall-network-gap-unexplained');
+assert(unexplainedGapIssue, 'A short unexplained break between nearly collinear wall runs must be surfaced.');
+assert(unexplainedGapIssue.entityId === 'gap-wall-left' && unexplainedGapIssue.relatedEntityId === 'gap-wall-right', 'Wall-gap diagnostics must identify both wall runs.');
+assert(unexplainedGapIssue.gapLength === 12, 'Wall-gap diagnostics must report the measured gap length.');
+
+const longUnexplainedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'long-gap-room', name: '门厅', type: 'entry', x: 0, y: 0, width: 220, height: 100 }],
+  walls: [
+    { id: 'long-gap-left', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
+    { id: 'long-gap-right', start: { x: 120, y: 1 }, end: { x: 200, y: 1 } }
+  ], doors: [], windows: []
+});
+const longGapIssue = longUnexplainedWallGap.issues.find(issue => issue.code === 'wall-network-gap-unexplained');
+assert(longGapIssue?.gapLength === 60, 'A likely doorway-sized gap without a detected opening must remain visible for review.');
+
+const openingSupportedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'opening-gap-room', name: '门厅', type: 'entry', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'opening-gap-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 } },
+    { id: 'opening-gap-right', start: { x: 92, y: 1 }, end: { x: 180, y: 1 } }
+  ],
+  doors: [{ id: 'opening-gap-door', x: 78, y: -4, width: 16, height: 8, sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }], windows: []
+});
+assert(!openingSupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), 'A wall break covered by a detected opening must not be reported as unexplained.');
+
+
+const verticallySupportedWallGap = validateFloorplanDraft({
+  rooms: [{ id: 'vertical-opening-gap-room', name: '卧室', type: 'bedroom', x: 800, y: 200, width: 200, height: 400 }],
+  walls: [
+    { id: 'vertical-opening-gap-upper', start: { x: 844, y: 200 }, end: { x: 844, y: 372 } },
+    { id: 'vertical-opening-gap-lower', start: { x: 845, y: 444 }, end: { x: 845, y: 600 } }
+  ],
+  doors: [{ id: 'vertical-opening-gap-door', x: 840, y: 372, width: 8, height: 72, sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }],
+  windows: []
+});
+assert(
+  !verticallySupportedWallGap.issues.some(issue => issue.code === 'wall-network-gap-unexplained'),
+  'A vertical wall gap covered by a correctly centered vertical opening must not be reported as unexplained.'
+);
+
+const openingRegressions = validateFloorplanDraft({
+  rooms: [{ id: 'room-1', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [
+    { id: 'wall-duplicate', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, thickness: 10 },
+    { id: 'wall-duplicate', start: { x: 0, y: 100 }, end: { x: 100, y: 100 }, thickness: 10 }
+  ],
+  doors: [{ id: 'door-1', x: 20, y: 20, width: 0, height: 8 }],
+  windows: [{ id: 'window-lost', x: 500, y: 500, width: 50, height: 8 }]
+});
+assert(openingRegressions.issues.some(issue => issue.code === 'duplicate-wall-id'), 'Duplicate wall IDs must be detected.');
+assert(openingRegressions.issues.some(issue => issue.code === 'invalid-door-dimensions'), 'Non-positive door dimensions must be detected.');
+assert(openingRegressions.issues.some(issue => issue.code === 'window-not-associated-with-room'), 'Windows outside all rooms must be flagged for review.');
+assert(openingRegressions.metrics.roomGeometryValidRatio === 1, 'Spatial metrics must expose a perfect room geometry ratio for valid rooms.');
+assert(openingRegressions.metrics.wallGeometryValidRatio === 1, 'Spatial metrics must expose valid wall geometry ratio separately from duplicate IDs.');
+assert(openingRegressions.metrics.openingAssociationRatio === 0.5, 'Spatial metrics must report opening association ratio across doors and windows.');
+assert(openingRegressions.metrics.issuesByCode['duplicate-wall-id'] === 1, 'Spatial metrics must count diagnostics by stable issue code.');
+assert(openingRegressions.metrics.wallAttachmentRatio === 0, 'Openings without verified wall attachment must not count as attached.');
+const attachmentChecks = validateFloorplanDraft({
+  rooms: [{ id: 'attachment-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-real', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, thickness: 10 }],
+  doors: [
+    { id: 'door-attached', x: 30, y: 0, width: 28, height: 8, attachedWallId: 'wall-real' },
+    { id: 'door-stale', x: 60, y: 0, width: 28, height: 8, attachedWallId: 'wall-deleted' },
+    { id: 'door-review', x: 80, y: 0, width: 28, height: 8, needsWallAttachmentReview: true }
+  ],
+  windows: []
+});
+assert(attachmentChecks.metrics.wallAttachedOpeningCount === 1, 'Only openings attached to a current wall and not flagged for review count as verified.');
+assert(attachmentChecks.metrics.wallAttachmentRatio === Number((1 / 3).toFixed(4)), 'Wall attachment ratio must reflect all detected openings.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-attached-wall-missing' && issue.relatedEntityId === 'wall-deleted'), 'Stale wall references must be reported with the missing wall ID.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-review' && issue.entityId === 'door-review'), 'Openings awaiting wall review must remain visible in diagnostics.');
+assert(attachmentChecks.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-review'), 'An opening under review without a wall reference must also explain that the attachment is missing.');
+
+// A wall-supported opening can sit just beyond the detected room-interior box.
+// Associate it only when the referenced wall is geometrically consistent.
+const wallSupportedRoomAssociation = validateFloorplanDraft({
+  rooms: [{ id: 'room-supported', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'exterior-wall', start: { x: 125, y: 0 }, end: { x: 125, y: 100 }, thickness: 8 }],
+  doors: [{
+    id: 'supported-exterior-door', x: 120, y: 20, width: 10, height: 60,
+    attachedWallId: 'exterior-wall',
+    sourceEvidence: { attachedWallId: 'exterior-wall', withinWallSpan: true, withinAttachmentSpan: true }
+  }]
+});
+assert(!wallSupportedRoomAssociation.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A nearby room may be associated when the opening has a valid attached-wall reference and lies on that wall');
+assert(wallSupportedRoomAssociation.metrics.openingAssociationRatio === 1,
+  'Wall-supported room association must be reflected in the opening association metric');
+assert(wallSupportedRoomAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-supported'),
+  'The spatial graph must use the same wall-supported room association as validation');
+
+const supportedWallGapAssociation = validateFloorplanDraft({
+  rooms: [{ id: 'room-gap-supported', name: '门厅', type: 'entry', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-gap-supported', start: { x: 0, y: 125 }, end: { x: 100, y: 125 }, thickness: 8 }],
+  doors: [{
+    id: 'door-in-supported-gap', x: 92, y: 120, width: 86, height: 10,
+    attachedWallId: 'wall-gap-supported',
+    sourceEvidence: {
+      attachedWallId: 'wall-gap-supported',
+      inferredFrom: 'wall-gap-between-supported-wall-runs',
+      gapLength: 86,
+      nearWallEndpoint: true,
+      withinWallSpan: true,
+      withinAttachmentSpan: true
+    }
+  }]
+});
+assert(!supportedWallGapAssociation.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A documented door gap may extend beyond one wall-run endpoint when its axis and gap length support the relation');
+assert(supportedWallGapAssociation.graph.doorConnections[0].connectedRoomIds.includes('room-gap-supported'),
+  'Documented wall-gap doors must produce the same room connection in the spatial graph');
+
+const wallEndpointNearMiss = validateFloorplanDraft({
+  rooms: [{ id: 'room-near-miss', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'exterior-wall', start: { x: 125, y: 0 }, end: { x: 125, y: 100 }, thickness: 8 }],
+  doors: [{
+    id: 'door-beyond-wall-end', x: 120, y: 90, width: 10, height: 60,
+    attachedWallId: 'exterior-wall',
+    sourceEvidence: { attachedWallId: 'exterior-wall', withinWallSpan: true, withinAttachmentSpan: true }
+  }]
+});
+assert(wallEndpointNearMiss.issues.some(issue => issue.code === 'door-not-associated-with-room'),
+  'A claimed wall attachment beyond the measured wall segment must not create room association');
+
+// A preferred source-wall reference must never defeat the opening's measured orientation.
+const orientationConstrainedAttachment = repairRecognitionTopology({
+  rooms: [{ id: 'orientation-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [
+    { id: 'wall-horizontal-target', sourceCandidateId: 'candidate-horizontal', start: { x: 0, y: 0 }, end: { x: 100, y: 0 }, confidence: 0.9 },
+    { id: 'wall-vertical-wrong', sourceCandidateId: 'candidate-vertical', start: { x: 100, y: 0 }, end: { x: 100, y: 100 }, confidence: 0.95 }
+  ],
+  doors: [{
+    id: 'orientation-door', x: 40, y: 0, width: 28, height: 8, confidence: 0.8,
+    sourceEvidence: {
+      expectedWallOrientation: 'horizontal',
+      wallCandidateId: 'candidate-vertical'
+    }
+  }],
+  windows: []
+});
+const orientationDoor = orientationConstrainedAttachment.doors.find((door) => door.id === 'orientation-door');
+assert(orientationDoor, 'Orientation-constrained door should remain in the topology result.');
+assert(orientationDoor.orientation === 'horizontal', 'A door with an explicit horizontal support constraint must not attach to a vertical wall.');
+assert(orientationDoor.attachedWallId !== 'wall-vertical-wrong', 'A stale preferred candidate ID must not override geometric orientation evidence.');
+
+const unlinkedOpening = validateFloorplanDraft({
+  rooms: [{ id: 'room-unlinked', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [{ id: 'wall-unlinked', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
+  doors: [{ id: 'door-unlinked', x: 40, y: 0, width: 28, height: 8 }],
+  windows: []
+});
+assert(unlinkedOpening.reviewRequired, 'An opening with no verified wall reference must require review.');
+assert(unlinkedOpening.issues.some(issue => issue.code === 'opening-wall-attachment-missing' && issue.entityId === 'door-unlinked'), 'Unattached openings must receive a clear missing-wall diagnostic.');
+const evidenceTrace = validateFloorplanDraft({
+  rooms: [{ id: 'evidence-room', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100, source: 'opencv-wall-grid', sourceEvidence: { imageBox: { x: 8, y: 12, width: 100, height: 90 }, candidateId: 'room-candidate-7' } }],
+  walls: [{ id: 'evidence-wall', start: { x: 10, y: 10 }, end: { x: 10, y: 10 }, source: 'ml-wall', sourceEvidence: { imageSegmentId: 'segment-4', confidence: 0.51 } }],
+  doors: [{ id: 'evidence-door', x: 500, y: 500, source: 'door-symbol-scanner', sourceEvidence: { imageBox: { x: 480, y: 490, width: 24, height: 12 } } }],
+  windows: []
+});
+const tracedWallIssue = evidenceTrace.issues.find(issue => issue.code === 'invalid-wall-segment');
+assert(tracedWallIssue.entityEvidence?.[0]?.sourceEvidence?.imageSegmentId === 'segment-4', 'Spatial diagnostics must preserve the source evidence for the affected wall.');
+const tracedDoorIssue = evidenceTrace.issues.find(issue => issue.code === 'door-not-associated-with-room');
+assert(tracedDoorIssue.entityEvidence?.[0]?.sourceEvidence?.imageBox?.x === 480, 'Opening diagnostics must preserve the originating image box.');
+
+const emptyMetrics = validateFloorplanDraft({ rooms: [], walls: [], doors: [], windows: [] }).metrics;
+assert(emptyMetrics.roomGeometryValidRatio === null, 'Missing room evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.wallGeometryValidRatio === null, 'Missing wall evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.openingAssociationRatio === null, 'Missing opening evidence must be null, not a misleading zero ratio.');
+assert(emptyMetrics.wallAttachmentRatio === null, 'Missing opening evidence must not imply a 0% wall attachment rate.');
+
+
+// Finalization must not silently discard structured diagnostics produced by
+// upstream recognizers; downstream logs should retain their code and entity.
+const finalizedWithStructuredIssue = finalizeRecognitionDraft({
+  rooms: [{ id: 'review-room', name: '待核实空间', type: 'space', x: 0, y: 0, width: 100, height: 100 }],
+  walls: [],
+  doors: [],
+  windows: [],
+  issues: [{ code: 'upstream-warning', severity: 'review', entityId: 'review-room' }]
+});
+assert(
+  finalizedWithStructuredIssue.issues.some(issue => issue.includes('upstream-warning') && issue.includes('review-room')),
+  'Finalization must preserve structured upstream issues in the serialized issue list.'
+);
+
+const invalidFinalizedDraft = finalizeRecognitionDraft({
+  rooms: [
+    { id: 'bad-room-a', name: '客厅', type: 'living', x: 0, y: 0, width: 100, height: 100 },
+    { id: 'bad-room-b', name: '卧室', type: 'bedroom', x: 40, y: 40, width: 100, height: 100 }
+  ],
+  walls: [{ id: 'zero-wall', start: { x: 10, y: 10 }, end: { x: 10, y: 10 } }],
+  doors: [],
+  windows: [],
+  quality: { needsReview: false }
+});
+assert(invalidFinalizedDraft.quality.needsReview, 'Spatial validation failures must force the recognition review gate.');
+assert(invalidFinalizedDraft.quality.spatialValidation.issueCount > 0, 'Finalized quality must expose spatial validation issue counts.');
+assert(invalidFinalizedDraft.quality.spatialValidation.metrics.roomGeometryValidRatio === 1, 'Finalized quality must expose spatial metrics to downstream consumers.');
+assert(invalidFinalizedDraft.quality.spatialValidation.metrics.reviewCount > 0, 'Finalized quality metrics must preserve review diagnostics.');
+
+
+
+const finalizedWithSpatialContradiction = finalizeRecognitionDraft({
+  rooms: [
+    { id: 'final-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 220, height: 100 },
+    { id: 'final-overlap-room', name: '卧室', type: 'bedroom', x: 180, y: 20, width: 80, height: 100 }
+  ],
+  walls: [
+    { id: 'final-gap-left', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
+    { id: 'final-gap-right', start: { x: 120, y: 1 }, end: { x: 200, y: 1 } }
+  ], doors: [], windows: [], quality: { needsReview: false }
+});
+assert(finalizedWithSpatialContradiction.quality.needsReview, 'An unresolved spatial contradiction must propagate into the final review gate.');
+assert(finalizedWithSpatialContradiction.quality.spatialValidation.issues.some(issue => issue.code === 'room-bounds-overlap'), 'Finalized quality must expose spatial contradiction diagnostics to downstream readiness checks.');
+assert(finalizedWithSpatialContradiction.issues.some(issue => issue.includes('room-bounds-overlap')), 'The serialized issue list must retain spatial contradictions for logs and reviewers.');
+assert(finalizedWithSpatialContradiction.quality.threeDReadiness?.canAutoExtrude === false, 'An unresolved spatial contradiction must disable automatic 3D extrusion.');
+assert(finalizedWithSpatialContradiction.quality.threeDReadiness?.blockers?.includes('spatial-validation-review'), '3D readiness must identify spatial validation as the blocker.');
+assert(finalizedWithSpatialContradiction.quality.commercialReadiness?.autoPass === false, 'Spatial review findings must prevent commercial readiness from auto-passing.');
+
+
+// Source diagnostics must survive topology repair even when a small wall gap
+// is intentionally merged into one normalized segment.
+const finalizedWithRepairedSourceGap = finalizeRecognitionDraft({
+  rooms: [{ id: 'source-gap-room', name: '客厅', type: 'living', x: 0, y: 0, width: 200, height: 100 }],
+  walls: [
+    { id: 'source-gap-left', start: { x: 0, y: 0 }, end: { x: 80, y: 0 }, sourceEvidence: { candidateId: 'source-line-left' } },
+    { id: 'source-gap-right', start: { x: 88, y: 1 }, end: { x: 180, y: 1 }, sourceEvidence: { candidateId: 'source-line-right' } }
+  ],
+  doors: [], windows: [], quality: { needsReview: false }
+});
+assert(
+  finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssues.some(issue => issue.code === 'wall-network-gap-unexplained'),
+  'Pre-repair spatial diagnostics must preserve wall gaps that topology normalization later merges.'
+);
+assert(
+  finalizedWithRepairedSourceGap.issues.some(issue => issue.includes('修复前空间校验') && issue.includes('wall-network-gap-unexplained')),
+  'Serialized diagnostics must identify source-stage wall gaps separately from unresolved post-repair issues.'
+);
+assert(
+  finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssueCount === finalizedWithRepairedSourceGap.quality.spatialValidation.sourceIssues.length,
+  'Source diagnostic counts must match the preserved structured source issues.'
+);
+
+
 const job = {
   job: {
     job_no: 'VERIFY-2D-3D',
@@ -74,6 +512,36 @@ const job = {
 };
 
 const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aiinhouse-2d-3d-readiness-'));
+
+// Real CLI smoke test: image metadata must remain available on Linux runners
+// without sips, even when optional Pillow/OpenCV dependencies are unavailable.
+const imageSmokeDir = path.join(outputDir, 'image-smoke');
+fs.mkdirSync(imageSmokeDir, { recursive: true });
+const tinyPngPath = path.join(imageSmokeDir, 'tiny.png');
+fs.writeFileSync(tinyPngPath, Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2ioAAAAASUVORK5CYII=',
+  'base64'
+));
+const smokeJobPath = path.join(imageSmokeDir, 'job.json');
+fs.writeFileSync(smokeJobPath, JSON.stringify({
+  job: { job_no: 'IMAGE-META-SMOKE', source_type: 'digital', input_payload: {} },
+  house: { layout: '一室一厅一卫' },
+  floor_plan: {},
+  assets: { local_source_file: tinyPngPath }
+}), 'utf8');
+const smokeOutputDir = path.join(imageSmokeDir, 'output');
+const smokeRun = spawnSync(process.execPath, [
+  path.resolve('scripts/floorplan-preprocess.mjs'),
+  '--job', smokeJobPath,
+  '--output', smokeOutputDir
+], { encoding: 'utf8', timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
+assert(smokeRun.status === 0, 'Image preprocessing CLI smoke test must exit successfully: ' + (smokeRun.stderr || smokeRun.stdout));
+const smokePayloadPath = path.join(smokeOutputDir, 'recognition-preprocess.json');
+assert(fs.existsSync(smokePayloadPath), 'Image preprocessing CLI must write its JSON payload.');
+const smokePayload = JSON.parse(fs.readFileSync(smokePayloadPath, 'utf8'));
+assert(smokePayload.status === 'completed', 'A valid image source must complete preprocessing even when optional vision dependencies are missing.');
+assert(smokePayload.beforeWidth === 1 && smokePayload.beforeHeight === 1, 'Portable PNG header parsing must preserve source image dimensions without sips.');
+assert(fs.existsSync(smokePayload.preprocessedImagePath), 'Preprocessing must return an existing image path for downstream recognition.');
 const templateDraft = repairRecognitionTopology(buildRecognitionDraft(job, makeTemplateOnlyPreprocess()));
 const templateReadiness = templateDraft.quality.threeDReadiness;
 assert(templateReadiness.status !== 'ready_for_3d', 'Template-only recognition must not be ready for automatic 3D.');
@@ -111,6 +579,49 @@ const proposedReadiness = proposedDraft.quality.threeDReadiness;
 assert(proposedReadiness.metrics.proposedOpeningCount >= 1, 'Proposed openings must be counted separately.');
 assert(proposedReadiness.blockers.includes('proposed-openings-require-review'), 'Proposed openings must block automatic 3D readiness.');
 assert(proposedReadiness.status !== 'ready_for_3d', 'A draft with unresolved proposed openings must not be ready for automatic 3D.');
+
+const bayOutlineAnchorDraft = repairRecognitionTopology({
+  rooms: [{ id: 'bay-room', name: '阳台', type: 'balcony', x: 40, y: 0, width: 80, height: 100, confidence: 0.9 }],
+  walls: [{ id: 'bay-wall', start: { x: 40, y: 50 }, end: { x: 80, y: 50 }, thickness: 10, confidence: 0.9 }],
+  doors: [],
+  windows: [{
+    id: 'bay-outline-anchor-regression',
+    type: 'window',
+    source: 'bay-window-outline-scanner',
+    x: 50,
+    y: 0,
+    width: 8,
+    height: 100,
+    confidence: 0.8,
+    sourceEvidence: { inferredFrom: 'exterior-bay-outline-with-return-support' }
+  }]
+});
+const bayOutlineRegression = bayOutlineAnchorDraft.windows.find((opening) => opening.id === 'bay-outline-anchor-regression');
+assert(bayOutlineRegression, 'Bay outline regression candidate must remain available for diagnostics.');
+assert(bayOutlineRegression.sourceEvidence.nearWallEndpoint === true, 'Bay outline endpoint evidence must use the rectangle center, not its top-left coordinate.');
+
+assert(bayOutlineRegression.wallDistance <= 4, 'Bay outline distance evidence must use the same center anchor as endpoint evidence (allowing the topology grid snap).');
+
+const exteriorGapAnchorDraft = repairRecognitionTopology({
+  rooms: [{ id: 'bathroom-gap-room', name: '卫生间', type: 'bathroom', x: 0, y: 0, width: 100, height: 100, confidence: 0.9 }],
+  walls: [{ id: 'bathroom-gap-wall', start: { x: 44, y: 0 }, end: { x: 44, y: 100 }, thickness: 10, confidence: 0.9 }],
+  doors: [],
+  windows: [{
+    id: 'exterior-gap-anchor-regression',
+    type: 'window',
+    source: 'exterior-wall-gap-scanner',
+    x: 40,
+    y: 0,
+    width: 8,
+    height: 66,
+    confidence: 0.8,
+    sourceEvidence: { roomId: 'bathroom-gap-room', inferredFrom: 'exterior-vertical-wall-gap', expectedWallOrientation: 'vertical', acceptedAsExteriorWindow: true }
+  }]
+});
+const exteriorGapRegression = exteriorGapAnchorDraft.windows.find((opening) => opening.id === 'exterior-gap-anchor-regression');
+assert(exteriorGapRegression, 'Exterior wall-gap regression candidate must remain available for diagnostics.');
+assert(exteriorGapRegression.wallDistance <= 4, 'Exterior wall-gap attachment distance must use the opening center, not the top-left coordinate.');
+assert(exteriorGapRegression.sourceEvidence.wallDistance <= 4, 'Exterior wall-gap source evidence must report the same center-based wall distance.');
 
 fs.writeFileSync(path.join(outputDir, 'template-draft.json'), JSON.stringify(templateDraft, null, 2), 'utf8');
 fs.writeFileSync(path.join(outputDir, 'grid-draft.json'), JSON.stringify(gridDraft, null, 2), 'utf8');

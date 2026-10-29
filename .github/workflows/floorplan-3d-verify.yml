@@ -1,0 +1,67 @@
+name: Floorplan to 3D verification
+
+on:
+  push:
+    branches: [main, "improve/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # The real floor-plan pipeline uses Python/OpenCV for geometry extraction.
+      # Without these dependencies it silently falls back to image compression
+      # and produces zero visual wall/door/window candidates.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install OCR and floor-plan image processing dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng
+          python -m pip install --disable-pip-version-check numpy pillow opencv-python-headless
+      - name: Verify the exact Python runtime has OpenCV
+        run: python -c "import cv2, numpy, PIL; print('python OpenCV runtime:', cv2.__version__, 'numpy:', numpy.__version__, 'Pillow:', PIL.__version__)"
+      - run: npm ci
+      - name: Validate recognition error book
+        run: npm run validate:error-book
+      - run: npm run verify:2d3d
+      - name: Verify Blender shared-wall geometry without Blender runtime
+        run: python scripts/blender/test_shared_room_walls.py
+      - name: Verify geometry feature extraction (junctions and parallel lines)
+        run: node codex-worker/src/recognizers/geometry-feature-detector.test.js
+      # Run the real recognition pipeline on a checked-in image, not just synthetic fixtures.
+      - name: Run sample floor-plan recognition
+        env:
+          AIINHOUSE_PYTHON_BIN: python
+        run: node scripts/batch-recognition-sample.mjs --image "./WX20260329-112615@2x.png" --output "./tmp/sample-floorplan-eval"
+      - name: Build geometry feature overlay for the real sample
+        run: node scripts/inspect-floorplan-geometry.mjs --image "./WX20260329-112615@2x.png" --preprocess "$(find ./tmp/sample-floorplan-eval -name recognition-preprocess.json -print -quit)" --output "./tmp/sample-floorplan-eval/geometry-debug"
+      - name: Fail if structural wall candidates lose raster appearance evidence
+        run: |
+          node -e "const fs=require('fs'); const files=require('child_process').execSync('find ./tmp/sample-floorplan-eval -name recognition-preprocess.json -print -quit',{encoding:'utf8'}).trim(); if(!files){console.error('Recognition preprocess report missing');process.exit(1)} const p=JSON.parse(fs.readFileSync(files,'utf8')); const lines=(p.geometryCandidates?.lines||[]).filter(x=>/wall|structural|morphology/i.test(String(x.source||''))); const sampled=lines.filter(x=>x.appearance && Number.isFinite(x.appearance.meanLuminance) && Number.isFinite(x.appearance.centerBackgroundContrast) && Number.isFinite(x.appearance.backgroundSampleOffset) && Number(x.appearance.backgroundSampleCount)>0 && Array.isArray(x.appearance.meanBGR)); const thick=sampled.filter(x=>Number(x.thickness)>16); const badOffsets=thick.filter(x=>Number(x.appearance.backgroundSampleOffset)<Math.ceil(Number(x.thickness)/2)+3); console.log(JSON.stringify({structuralCandidateCount:lines.length,appearanceEvidenceCount:sampled.length,thickCandidateCount:thick.length,invalidThicknessAwareOffsets:badOffsets.length},null,2)); if(!lines.length||!sampled.length||badOffsets.length){console.error('Structural wall candidates must preserve raster appearance evidence and sample outside measured thick wall bands');process.exit(1)}"
+      - name: Fail if OCR extraction is missing from the real sample
+        run: |
+          node -e "const fs=require('fs'),cp=require('child_process'); const p=cp.execSync('find ./tmp/sample-floorplan-eval -name recognition-preprocess.json -print -quit',{encoding:'utf8'}).trim(); if(!p||!fs.existsSync(p)){console.error('Recognition preprocess report missing');process.exit(1)} const r=JSON.parse(fs.readFileSync(p,'utf8')); const status=r.ocrStatus||{}; const candidates=r.ocrCandidates||[]; const count=candidates.length; const balcony=candidates.some(c=>c.text==='阳台'&&String(c.source||'').includes('room-region')); console.log(JSON.stringify({path:p,ocrStatus:status,ocrCandidateCount:count,regionBalconyLabelDetected:balcony},null,2)); if(!status.available||count===0||!status.regionOcr?.regionLabelCount||!balcony){console.error('OCR must extract the real sample room labels, including 阳台 from a focused region crop');process.exit(1)}"
+      - name: Fail if OCR labels are unassigned or proposed geometry is unreviewed
+        run: |
+          node -e "const fs=require('fs'); const p='./tmp/sample-floorplan-eval/summary.json'; if(!fs.existsSync(p)){console.error('Recognition summary missing');process.exit(1)} const r=JSON.parse(fs.readFileSync(p,'utf8')); const failures=[]; for(const row of (r.results||[])){const audit=row.visualEvidence?.semanticEvidenceAudit||{}; if(!audit.semanticLabelsFullyImageGrounded) failures.push(row.name+': room labels are not fully OCR-grounded'); if((audit.unassignedOcrRoomLabelCount||0)>0) failures.push(row.name+': unassigned OCR room labels: '+audit.unassignedOcrRoomLabelCount); for(const room of (row.roomDetails||[])){if(room.source==='ocr-label-supplemental'&&(!room.boundaryNeedsReview||!room.semanticNeedsReview)) failures.push(row.name+': supplemental room '+room.name+' is missing review flags');}} console.log(JSON.stringify({results:(r.results||[]).length,failures},null,2)); if(failures.length){console.error(failures.join('\\n'));process.exit(1)}"
+      - name: Fail if the real sample silently skips visual recognition
+        if: always()
+        run: |
+          node -e "const fs=require('fs'); const p='./tmp/sample-floorplan-eval/summary.json'; if(!fs.existsSync(p)){console.error('Recognition summary missing'); process.exit(1)} const r=JSON.parse(fs.readFileSync(p,'utf8')); const bad=(r.results||[]).filter(x=>!x.visualEvidence?.visionAvailable); if(bad.length){console.error(JSON.stringify(bad.map(x=>({name:x.name,visionError:x.visualEvidence?.visionError,issues:x.visualEvidence?.preprocessingIssues})),null,2));process.exit(1)} console.log('Visual recognition runtime active for',r.results.length,'sample(s)')"
+      - name: Upload sample recognition report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-floorplan-recognition-report
+          path: |
+            tmp/sample-floorplan-eval/**
+          if-no-files-found: warn
+      - run: npm run build

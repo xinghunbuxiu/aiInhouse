@@ -1,0 +1,281 @@
+{
+  "version": "1.0.0",
+  "title": "户型识别错题本与经验库",
+  "purpose": "记录识别失败、错误倾向、真实原因、纠正原则和可执行回归验证；经验必须能被检索、复现和验证，不能只保存结论。",
+  "reviewProtocol": [
+    "每轮识别结束后保存输入样本、识别输出、证据来源、几何结果、校验结果和人工修正；缺失数据标记为 unavailable，不猜测。",
+    "将错误归类为 OCR、语义分类、空间归属、几何拓扑、图元识别、2D 到 3D 转换或验证门禁。",
+    "逐条写清表面错误、真实原因、正确判断、触发条件、预防规则、回归测试和证据来源。",
+    "区分 observed（有历史代码/日志/样本支持）与 risk（根据代码路径识别的高风险，尚未证明发生）；不得把推测写成真实事故。",
+    "修复代码后必须增加最小回归用例；只写文档或新增知识 JSON 不算完成运行时修复。",
+    "每次复盘先检查已有错题是否复发，再新增或更新经验；相同根因合并，不无限堆重复条目。"
+  ],
+  "caseSchema": {
+    "requiredFields": [
+      "id",
+      "category",
+      "status",
+      "symptom",
+      "wrongOutcome",
+      "rootCause",
+      "groundTruth",
+      "prevention",
+      "regressionCheck",
+      "confidence"
+    ],
+    "evidenceFields": [
+      "commit",
+      "file",
+      "sample",
+      "workflowRun",
+      "humanReview"
+    ],
+    "lifecycle": [
+      "open",
+      "guarded",
+      "fixed",
+      "verified",
+      "reopened"
+    ]
+  },
+  "cases": [
+    {
+      "id": "ROOM-SEM-001",
+      "category": "semantic-classification",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "房间类型可能仅凭 OCR 名称关键字被直接推断。",
+      "wrongOutcome": "名称识别错误、缺字或区域合并时，可能把卫生间、卧室等空间分错；无文字时该路径也无法提供可靠语义。",
+      "rootCause": "local-draft.js 的 inferRoomType(name) 采用字符串关键字映射；这是一种标签解析捷径，不等于对空间实际用途的推理。",
+      "groundTruth": "房间用途需要联合文字、洁具/家具、边界闭合、门窗关系、外墙/栏杆、管井和相邻空间判断；标签只是证据之一。",
+      "prevention": [
+        "保留 label-derived type 作为候选，不覆盖证据推断结果。",
+        "至少组合两个相互独立的证据组；单一弱线索不能自动确认。",
+        "高影响证据冲突时进入人工复核，并分开记录语义置信度与几何置信度。",
+        "无文字场景必须走图元和空间关系推理分支。"
+      ],
+      "regressionCheck": "同一组 fixture/furniture/geometry 证据分别输入有标签、无标签和错误标签场景；无标签仍应给出有依据的候选，错误标签不得无条件胜出。",
+      "evidence": [
+        {
+          "file": "codex-worker/src/recognizers/local-draft.js",
+          "note": "存在 inferRoomType 的名称关键字映射"
+        },
+        {
+          "file": "backend/data/room-semantic-reasoning.json",
+          "note": "已建立证据推理原则，但尚未接入运行时"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-GEO-001",
+      "category": "room-assignment",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "OCR 房间标签被分配给相邻但不包含标签中心的几何房间。",
+      "wrongOutcome": "例如主卫/卧室标签靠近管井、门厅或相邻房间时，错误空间会继承该语义。",
+      "rootCause": "标签与房间的空间关联曾允许邻近关系影响归属，未始终要求标签中心落在对应房间内部。",
+      "groundTruth": "房间语义标签应首先归属于包含其中心点的房间；若没有可靠匹配，应保留未分配状态而不是猜最近房间。",
+      "prevention": [
+        "以点在边界内的几何关系作为主判据。",
+        "容差必须有界且有依据，不能让容差吞并相邻房间。",
+        "保留未分配 OCR 标签计数并让 CI 阻止静默丢弃。"
+      ],
+      "regressionCheck": "标签中心位于房间 A、距房间 B 更近时，仍必须分配给 A；中心不在任何房间内时应标记未分配/待复核。",
+      "evidence": [
+        {
+          "file": "codex-worker/src/recognizers/local-draft.js",
+          "note": "OCR 标签与几何房间关联逻辑"
+        },
+        {
+          "file": ".github/workflows/floorplan-3d-verify.yml",
+          "note": "现有门禁检查未分配 OCR 标签"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-OCR-001",
+      "category": "ocr",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "整图 OCR 未稳定识别小字房间名，尤其是阳台等边缘或窄区域文字。",
+      "wrongOutcome": "语义标签缺失，后续系统可能把未知空间当作普通 space，或用相邻房间类型错误补齐。",
+      "rootCause": "小字、低对比度、旋转/密集线条和整图缩放会降低 OCR 可读性；只依赖整图一次识别不够。",
+      "groundTruth": "整图 OCR 与房间区域局部裁剪 OCR 应互补；OCR 缺失不能直接证明空间不是该用途。",
+      "prevention": [
+        "保留原始 OCR 候选、来源和坐标。",
+        "对疑似房间区域进行局部裁剪和多种页面分割模式识别。",
+        "候选必须保留原图坐标并进行几何归属验证。"
+      ],
+      "regressionCheck": "真实样本中应检测到区域裁剪来源的“阳台”候选；输出须包含来源和可追溯坐标。",
+      "evidence": [
+        {
+          "file": ".github/workflows/floorplan-3d-verify.yml",
+          "note": "CI 明确检查区域 OCR 的阳台标签及 OCR 来源坐标"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-OCR-002",
+      "category": "ocr-normalization",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "短标签或 OCR 合并文本被过度标准化。",
+      "wrongOutcome": "真实标签如“男孩卧”被改写/丢失；或一行中混有尺寸、相邻标签时，因包含关键词而被误当成单个房间标签。",
+      "rootCause": "只用 contains 关键字匹配会接受混合文本；过度纠正又会损失原始标注。",
+      "groundTruth": "保留 OCR 原文，单独保存规范化值；只接受明确的房间标签模式，混合文本应拆分或进入复核。",
+      "prevention": [
+        "原文与规范化结果分字段存储。",
+        "使用完整标签模式而非任意包含关键词。",
+        "不能可靠拆分的混合行不自动分配。"
+      ],
+      "regressionCheck": "“男孩卧”必须原样保留；“客厅 3200”或两个标签合并的文本不能直接映射为单一房间。",
+      "evidence": [
+        {
+          "file": "codex-worker/src/recognizers/local-draft.js",
+          "note": "normalizeOcrCandidate 使用明确房间标签模式并保留 text"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-ZONE-001",
+      "category": "semantic-geometry-boundary",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "客厅与餐厅位于同一大块开放式几何区域。",
+      "wrongOutcome": "系统可能把餐厅标签强行贴给整个公共区，或凭语义名称虚构一面不存在的墙；也可能丢掉餐厅子区域。",
+      "rootCause": "语义分区与物理墙体边界不是同一概念；开放式客餐厅可能共享空间且没有实体隔墙。",
+      "groundTruth": "必须区分物理房间边界与功能分区。家具布局、餐桌椅、沙发/茶几、通道和标签可形成候选功能区，但不能因此捏造墙体。",
+      "prevention": [
+        "单独表示 semantic zone 与 structural room。",
+        "候选功能区记录依据和边界置信度；不确定时标记 review。",
+        "3D 墙体只能来自结构证据，功能区边界不能直接变墙。"
+      ],
+      "regressionCheck": "客厅/餐厅共处一个开放几何区域时，输出可有两个语义候选区，但不得无证据新增实体墙；分区证据不足时标记复核。",
+      "evidence": [
+        {
+          "file": "docs/FLOORPLAN-AI-PIPELINE.md",
+          "note": "既有复盘指出公共区语义分区与物理墙体边界需分开"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-GEO-002",
+      "category": "opening-association",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "门窗检测框坐标常是左上角，而门窗中心可能落在墙线或房间边界外。",
+      "wrongOutcome": "若直接用 x/y 关联房间，会误配门窗；若无限扩大容差，又会关联到远处房间。",
+      "rootCause": "不同识别器对 opening 的坐标语义不一致；简单点包含判断忽略了检测框中心、墙段和附着证据。",
+      "groundTruth": "先统一使用 opening 中心点；边界外回退必须要求真实墙引用、墙段范围/间隙证据和有限距离。",
+      "prevention": [
+        "优先读取 center/position，否则从检测框计算中心。",
+        "边界外关联需要墙附着证据，不允许纯最近房间猜测。",
+        "回退路径保留 review 标记。"
+      ],
+      "regressionCheck": "左上角在房间外但框中心在房间内的门窗应正确关联；没有墙引用且远离房间的开口不得被强行分配。",
+      "evidence": [
+        {
+          "file": "codex-worker/src/recognizers/spatial-reasoning.js",
+          "note": "openingPoint 与 roomsNearOpening 已实现有界关联规则"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-WALL-001",
+      "category": "wall-geometry",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "厚墙线的外侧背景采样点落在墙体带内。",
+      "wrongOutcome": "墙体与背景对比度被低估或采样失真，影响结构墙候选的外观证据。",
+      "rootCause": "固定偏移量未考虑测得墙厚；墙越厚，采样点越可能仍在墙内。",
+      "groundTruth": "背景采样偏移应基于测量墙厚，并留出安全余量；外观证据应保存亮度、颜色、背景对比度和采样数量。",
+      "prevention": [
+        "采样偏移必须超过半墙厚加安全余量。",
+        "缺少足够背景样本时，不得把外观证据当成可靠墙证据。"
+      ],
+      "regressionCheck": "CI 对厚度大于 16 像素的结构墙候选检查背景采样偏移是否至少为 ceil(thickness/2)+3。",
+      "evidence": [
+        {
+          "file": ".github/workflows/floorplan-3d-verify.yml",
+          "note": "存在厚墙外观采样偏移 CI 门禁"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-REVIEW-001",
+      "category": "review-gating",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "OCR 补充出的房间没有可靠原始边界，仍可能被当作已确认空间。",
+      "wrongOutcome": "下游 3D 流程把猜测的房间边界当作真实几何，形成错误墙体或错误房间。",
+      "rootCause": "OCR 文字能证明图上存在标签，但不能单独证明该空间边界已经被正确重建。",
+      "groundTruth": "语义来源可信度与边界几何可信度必须分开；补充房间可以作为候选，但边界和语义都要可复核。",
+      "prevention": [
+        "OCR supplemental room 必须携带 boundaryNeedsReview 和 semanticNeedsReview。",
+        "没有几何依据时不生成确定墙体。",
+        "报告需区分 OCR-grounded 与 geometry-grounded。"
+      ],
+      "regressionCheck": "CI 检查所有 supplemental room 都有边界与语义复核标记；标签完全来自图像并不代表边界自动通过。",
+      "evidence": [
+        {
+          "file": ".github/workflows/floorplan-3d-verify.yml",
+          "note": "已有 supplemental room review flags 门禁"
+        }
+      ],
+      "confidence": "high"
+    },
+    {
+      "id": "ROOM-ASSET-001",
+      "category": "symbol-recognition",
+      "status": "risk",
+      "lifecycle": "open",
+      "symptom": "图元目录中的标准示意图可能与实际项目图纸画法不一致。",
+      "wrongOutcome": "把相似小符号误认成马桶、地漏、灶台或栏杆，从而污染房间语义判断。",
+      "rootCause": "标准化 SVG 只是参考图例，实际图纸存在旋转、镜像、简化、黑白 CAD 和比例变化；单一图形相似度不足以确定语义。",
+      "groundTruth": "图元候选需结合原图局部像素、几何关系、所在房间、关联设备及相邻空间；单一图元不能单独确认房间用途。",
+      "prevention": [
+        "目录匹配输出候选及证据，而非绝对标签。",
+        "保留 rejectIf 条件和原图局部证据。",
+        "统计误报/漏报并用人工确认样本更新目录与回归测试。"
+      ],
+      "regressionCheck": "对每类高影响图元建立正例、近似干扰负例和旋转/镜像变体测试；当前未完成这些数据集前不得声称识别率已验证。",
+      "evidence": [
+        {
+          "file": "backend/data/recognition-assets.json",
+          "note": "资产目录说明图例需结合原图局部和空间关系，非直接自动确认"
+        }
+      ],
+      "confidence": "medium"
+    },
+    {
+      "id": "ROOM-PIPE-001",
+      "category": "pipeline-fallback",
+      "status": "observed",
+      "lifecycle": "guarded",
+      "symptom": "Python/OpenCV 运行时依赖缺失时，视觉预处理可能退化为压缩/占位路径。",
+      "wrongOutcome": "流水线看似运行完成，实际没有有效墙、门窗候选，后续结果却可能被误认为真实识别。",
+      "rootCause": "可选依赖缺失时存在降级路径，单纯检查进程成功或输出文件存在无法证明视觉识别真正执行。",
+      "groundTruth": "运行环境可用性、视觉证据存在性和最终识别质量是三个独立状态；缺少依赖必须显式报错或将结果标记为不可用。",
+      "prevention": [
+        "CI 先验证实际 Python 可导入 cv2/numpy/PIL。",
+        "真实样本检查 visionAvailable 与结构候选的外观证据。",
+        "降级输出不得伪装为成功识别。"
+      ],
+      "regressionCheck": "CI 运行真实样本并检查 visionAvailable；预处理报告缺失或视觉运行时不可用时必须失败。",
+      "evidence": [
+        {
+          "file": ".github/workflows/floorplan-3d-verify.yml",
+          "note": "工作流包含 OpenCV runtime 与真实样本视觉证据门禁"
+        }
+      ],
+      "confidence": "high"
+    }
+  ]
+}

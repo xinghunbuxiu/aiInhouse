@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "title": "Room semantic reasoning knowledge",
+  "description": "Evidence-based, explainable room-type inference. This knowledge base is not ground-truth geometry; every inference must retain supporting and contradicting evidence.",
+  "principles": [
+    "A room label is evidence, not unquestionable truth.",
+    "Infer room use from combinations of fixtures, furniture, boundary geometry, openings, exterior relationships, and neighboring spaces.",
+    "Do not infer a room type from one weak symbol or proximity alone.",
+    "Keep semantic confidence separate from geometric confidence.",
+    "Contradictory high-impact evidence must trigger review instead of forced classification.",
+    "Missing symbols are not negative evidence unless image quality and detector coverage are sufficient.",
+    "Store reviewed corrections as versioned cases with regression tests."
+  ],
+  "roomTypes": [
+    {
+      "type": "bathroom",
+      "aliases": ["卫生间", "厕所", "主卫", "次卫", "浴室"],
+      "supportingEvidence": [
+        { "id": "toilet", "group": "sanitary_fixture", "weight": 0.35 },
+        { "id": "shower_or_bathtub", "group": "wet_area_fixture", "weight": 0.25 },
+        { "id": "washbasin", "group": "sanitary_fixture", "weight": 0.2 },
+        { "id": "floor_drain_or_wet_area", "group": "plumbing", "weight": 0.15 },
+        { "id": "plumbing_shaft_or_wet_wall", "group": "spatial_context", "weight": 0.1 }
+      ],
+      "contradictions": [
+        { "id": "bed_and_bedroom_furniture", "action": "check_symbol_misclassification_or_room_boundary_merge" },
+        { "id": "fixture_outside_room_boundary", "action": "do_not_count_as_room_evidence" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    },
+    {
+      "type": "balcony",
+      "aliases": ["阳台", "露台"],
+      "supportingEvidence": [
+        { "id": "railing_or_glazed_balustrade", "group": "boundary_symbol", "weight": 0.3 },
+        { "id": "exterior_envelope_or_projection", "group": "boundary_topology", "weight": 0.25 },
+        { "id": "opening_to_living_or_bedroom", "group": "adjacency", "weight": 0.2 },
+        { "id": "exterior_window_or_sliding_door", "group": "opening_relation", "weight": 0.15 },
+        { "id": "outdoor_use_or_washer", "group": "functional_context", "weight": 0.1 }
+      ],
+      "contradictions": [
+        { "id": "fully_internal_enclosed_room", "action": "lower_confidence_without_exterior_evidence" },
+        { "id": "railing_may_be_stair_guard", "action": "check_exterior_envelope_and_adjacency" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    },
+    {
+      "type": "bedroom",
+      "aliases": ["卧室", "主卧", "次卧", "儿童房"],
+      "supportingEvidence": [
+        { "id": "bed", "group": "furniture", "weight": 0.3 },
+        { "id": "wardrobe_or_bedside_table", "group": "furniture", "weight": 0.15 },
+        { "id": "enclosed_room_with_door", "group": "boundary_topology", "weight": 0.2 },
+        { "id": "bedroom_label", "group": "text_label", "weight": 0.25 }
+      ],
+      "contradictions": [
+        { "id": "toilet_or_shower_in_same_region", "action": "check_room_boundary_before_classifying" },
+        { "id": "shaft_or_circulation_geometry", "action": "exclude_special_space_from_bedroom_fallback" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    },
+    {
+      "type": "kitchen",
+      "aliases": ["厨房"],
+      "supportingEvidence": [
+        { "id": "cooktop_or_stove", "group": "cooking_fixture", "weight": 0.3 },
+        { "id": "sink_and_countertop", "group": "worktop_fixture", "weight": 0.25 },
+        { "id": "range_hood_or_kitchen_appliance", "group": "appliance", "weight": 0.15 },
+        { "id": "kitchen_label", "group": "text_label", "weight": 0.25 }
+      ],
+      "contradictions": [
+        { "id": "bathroom_fixtures_inside_same_region", "action": "check_wet_area_boundary_and_symbol_identity" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    },
+    {
+      "type": "living",
+      "aliases": ["客厅"],
+      "supportingEvidence": [
+        { "id": "sofa_and_coffee_table", "group": "furniture", "weight": 0.3 },
+        { "id": "tv_console_or_media_wall", "group": "furniture", "weight": 0.15 },
+        { "id": "large_public_area_and_access", "group": "spatial_context", "weight": 0.2 },
+        { "id": "living_label", "group": "text_label", "weight": 0.25 }
+      ],
+      "contradictions": [
+        { "id": "dining_table_and_chairs_dominate", "action": "consider_open_plan_semantic_zone_without_inventing_a_wall" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    },
+    {
+      "type": "dining",
+      "aliases": ["餐厅"],
+      "supportingEvidence": [
+        { "id": "dining_table_and_chairs", "group": "furniture", "weight": 0.3 },
+        { "id": "adjacent_to_kitchen", "group": "spatial_context", "weight": 0.2 },
+        { "id": "dining_label", "group": "text_label", "weight": 0.25 }
+      ],
+      "contradictions": [
+        { "id": "table_may_be_desk_or_coffee_table", "action": "inspect_chair_arrangement_and_neighbor_context" }
+      ],
+      "minimumIndependentEvidenceGroups": 2,
+      "singleCueAutoAccept": false
+    }
+  ],
+  "decisionPolicy": {
+    "highConfidence": "At least two independent evidence groups support the same type, the room-boundary association is valid, and no high-impact contradiction remains.",
+    "mediumConfidence": "Evidence is plausible but incomplete; keep the candidate and list missing evidence.",
+    "lowConfidence": "Only one weak cue, ambiguous symbol, or no stable room boundary; keep type unknown and request review.",
+    "conflict": "If strong evidence supports incompatible types, first test whether geometry incorrectly merges adjacent spaces; do not average away the conflict.",
+    "noText": "Use the same inference process without text labels; do not substitute layout-count guesses for visual evidence.",
+    "negativeEvidence": "Absence of a fixture only lowers confidence when image resolution and detector recall are known to be adequate.",
+    "experienceUpdate": "A reviewed correction becomes a versioned case with source crop, evidence, previous prediction, corrected type/boundary, rationale, and regression assertion."
+  }
+}

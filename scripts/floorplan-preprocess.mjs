@@ -28,67 +28,152 @@ function getFileSize(filePath) {
 }
 
 function getImageMeta(filePath) {
+  // Use the native macOS reader when available, then fall back to parsing
+  // common image headers so Linux/Windows still report dimensions without Pillow.
   const output = run('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', filePath]);
-  if (output.status !== 0) {
-    return { width: 0, height: 0 };
+  if (output.status === 0) {
+    const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
+    const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
+    if (widthMatch && heightMatch) {
+      return { width: Number(widthMatch[1]), height: Number(heightMatch[1]) };
+    }
   }
 
-  const widthMatch = output.stdout.match(/pixelWidth:\s+(\d+)/);
-  const heightMatch = output.stdout.match(/pixelHeight:\s+(\d+)/);
-  return {
-    width: widthMatch ? Number(widthMatch[1]) : 0,
-    height: heightMatch ? Number(heightMatch[1]) : 0
-  };
+  try {
+    const buffer = fs.readFileSync(filePath);
+    // PNG: width and height are unsigned big-endian integers in IHDR.
+    if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+      return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    }
+    // GIF: logical screen width/height are little-endian 16-bit values.
+    if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'GIF') {
+      return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+    }
+    // JPEG: walk marker segments until a Start Of Frame marker is found.
+    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let offset = 2;
+      while (offset + 4 <= buffer.length) {
+        if (buffer[offset] !== 0xff) {
+          offset += 1;
+          continue;
+        }
+        while (offset < buffer.length && buffer[offset] === 0xff) offset += 1;
+        if (offset >= buffer.length) break;
+        const marker = buffer[offset++];
+        if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) continue;
+        if (offset + 2 > buffer.length) break;
+        const segmentLength = buffer.readUInt16BE(offset);
+        if (segmentLength < 2 || offset + segmentLength > buffer.length) break;
+        const startOfFrame = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker);
+        if (startOfFrame && segmentLength >= 7) {
+          return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 3) };
+        }
+        offset += segmentLength;
+      }
+    }
+    // WebP extended format (VP8X) stores 24-bit width/height minus one.
+    if (buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP' && buffer.toString('ascii', 12, 16) === 'VP8X') {
+      return { width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };
+    }
+  } catch {
+    // Unreadable/unsupported images remain explicitly dimensionless.
+  }
+  return { width: 0, height: 0 };
 }
-
 function buildCompressedImage(sourcePath, outputDir) {
-  if (!sourcePath || !fs.existsSync(sourcePath)) {
+  if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
     return {
       preprocessedImagePath: '',
-      operations: ['missing-source']
+      operations: ['missing-source'],
+      beforeSizeBytes: 0,
+      afterSizeBytes: 0,
+      beforeWidth: 0,
+      beforeHeight: 0,
+      afterWidth: 0,
+      afterHeight: 0
     };
   }
 
   const targetFile = path.join(outputDir, 'recognition-input.jpg');
   const beforeSize = getFileSize(sourcePath);
   const metaBefore = getImageMeta(sourcePath);
-  const result = run('sips', [
-    '-s', 'format', 'jpeg',
-    '-s', 'formatOptions', '75',
-    '-Z', '1400',
-    sourcePath,
-    '--out', targetFile
-  ]);
 
-  if (result.status !== 0) {
-    return {
-      preprocessedImagePath: sourcePath,
-      operations: ['sips-failed-use-source'],
-      beforeSizeBytes: beforeSize,
-      afterSizeBytes: beforeSize,
-      beforeWidth: metaBefore.width,
-      beforeHeight: metaBefore.height,
-      afterWidth: metaBefore.width,
-      afterHeight: metaBefore.height
-    };
+  // Prefer Pillow for a portable implementation on Linux/macOS/Windows.
+  // EXIF orientation is applied before resizing so OCR and geometry use the
+  // same visual coordinate system. If Pillow is unavailable, retain the
+  // existing macOS sips path, then safely fall back to the original file.
+  const pythonScript = [
+    'import sys',
+    'try:',
+    ' from PIL import Image, ImageOps',
+    ' image = Image.open(sys.argv[1])',
+    ' image = ImageOps.exif_transpose(image).convert("RGB")',
+    ' image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)',
+    ' image.save(sys.argv[2], "JPEG", quality=75, optimize=True)',
+    ' print(f"{image.width}x{image.height}")',
+    'except Exception as exc:',
+    ' print(str(exc), file=sys.stderr)',
+    ' sys.exit(1)'
+  ].join('\n');
+  const pythonNames = process.platform === 'win32' ? ['python', 'py'] : ['python3', 'python'];
+  for (const python of pythonNames) {
+    const result = run(python, ['-c', pythonScript, sourcePath, targetFile]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const dimensions = String(result.stdout || '').match(/(\d+)x(\d+)/);
+      const metaAfter = dimensions
+        ? { width: Number(dimensions[1]), height: Number(dimensions[2]) }
+        : getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['exif-orientation-corrected', 'resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'portable-python-pillow'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
   }
 
-  const metaAfter = getImageMeta(targetFile);
+  if (process.platform === 'darwin') {
+    const result = run('sips', [
+      '-s', 'format', 'jpeg',
+      '-s', 'formatOptions', '75',
+      '-Z', '1400',
+      sourcePath,
+      '--out', targetFile
+    ]);
+    if (result.status === 0 && fs.existsSync(targetFile) && getFileSize(targetFile) > 0) {
+      const metaAfter = getImageMeta(targetFile);
+      return {
+        preprocessedImagePath: targetFile,
+        operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75', 'macos-sips-fallback'],
+        beforeSizeBytes: beforeSize,
+        afterSizeBytes: getFileSize(targetFile),
+        beforeWidth: metaBefore.width,
+        beforeHeight: metaBefore.height,
+        afterWidth: metaAfter.width,
+        afterHeight: metaAfter.height
+      };
+    }
+  }
+
   return {
-    preprocessedImagePath: targetFile,
-    operations: ['resize-max-1400', 'convert-jpeg', 'jpeg-quality-75'],
+    preprocessedImagePath: sourcePath,
+    operations: ['portable-preprocess-unavailable-use-source'],
     beforeSizeBytes: beforeSize,
-    afterSizeBytes: getFileSize(targetFile),
+    afterSizeBytes: beforeSize,
     beforeWidth: metaBefore.width,
     beforeHeight: metaBefore.height,
-    afterWidth: metaAfter.width,
-    afterHeight: metaAfter.height
+    afterWidth: metaBefore.width,
+    afterHeight: metaBefore.height
   };
 }
 
 function runPythonVision(sourcePath, outputDir) {
   const script = `
-import json, math, sys
+import json, math, sys, csv, io, shutil, subprocess, os, tempfile, re
 try:
     import cv2
     import numpy as np
@@ -119,15 +204,191 @@ structural_wall_seed = cv2.morphologyEx(structural_wall_seed, cv2.MORPH_CLOSE, c
 edges = cv2.Canny(blur, 50, 150, apertureSize=3)
 lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=70, minLineLength=max(30, min(w, h) // 18), maxLineGap=10)
 
+def extract_ocr_candidates(image_path):
+    """Extract OCR text-line boxes with multiple segmentation modes and preserve source evidence."""
+    binary = shutil.which("tesseract")
+    if not binary:
+        return [], {"available": False, "engine": "tesseract", "error": "tesseract_not_installed", "attempts": []}
+
+    attempts = []
+    room_label_pattern = re.compile(r"^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九0-9]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间)$")
+    def is_room_label(text):
+        cleaned = str(text or "").strip().strip("|.,:;，。；：、!！?？“”‘’()（）{}")
+        return bool(room_label_pattern.fullmatch(cleaned))
+
+    def parse_tsv(tsv, language, psm, scale=1.0):
+        grouped = {}
+        for row in csv.DictReader(io.StringIO(tsv), delimiter="\\t"):
+            if row.get("level") != "5":
+                continue
+            text = (row.get("text") or "").strip()
+            try:
+                confidence = float(row.get("conf") or -1)
+                x, y = int(row.get("left") or 0) / scale, int(row.get("top") or 0) / scale
+                width, height = int(row.get("width") or 0) / scale, int(row.get("height") or 0) / scale
+                line_key = (row.get("block_num"), row.get("par_num"), row.get("line_num"))
+            except (TypeError, ValueError):
+                continue
+            if not text or confidence < 20 or width <= 0 or height <= 0:
+                continue
+            item = grouped.setdefault(line_key, {"parts": [], "x1": x, "y1": y, "x2": x + width, "y2": y + height, "confidences": []})
+            item["parts"].append(text)
+            item["x1"], item["y1"] = min(item["x1"], x), min(item["y1"], y)
+            item["x2"], item["y2"] = max(item["x2"], x + width), max(item["y2"], y + height)
+            item["confidences"].append(confidence)
+        candidates = []
+        for index, item in enumerate(grouped.values()):
+            joined = "".join(item["parts"])
+            text = joined if any(ord(char) > 127 for char in joined) else " ".join(item["parts"])
+            text = text.strip()
+            if not text:
+                continue
+            candidates.append({
+                "id": "tesseract-psm%d-line-%d" % (psm, index + 1), "text": text,
+                "x": item["x1"], "y": item["y1"],
+                "width": item["x2"] - item["x1"], "height": item["y2"] - item["y1"],
+                "center": {"x": (item["x1"] + item["x2"]) / 2, "y": (item["y1"] + item["y2"]) / 2},
+                "confidence": round(sum(item["confidences"]) / max(len(item["confidences"]), 1) / 100, 3),
+                "source": "tesseract:%s:psm%d" % (language, psm),
+                "evidence": {"engine": "tesseract", "language": language, "pageSegmentationMode": psm, "wordCount": len(item["parts"])}
+            })
+        return candidates
+
+    variant_files = []
+    variants = [(image_path, 1.0, 11), (image_path, 1.0, 12)]
+    try:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        enlarged = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        adaptive = cv2.adaptiveThreshold(enlarged, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9)
+        enhanced_file = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-", suffix=".png", delete=False)
+        enhanced_file.close()
+        cv2.imwrite(enhanced_file.name, adaptive)
+        variant_files.append(enhanced_file.name)
+        variants.append((enhanced_file.name, 2.0, 12))
+
+        enlarged3 = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        enhanced3_file = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-", suffix=".png", delete=False)
+        enhanced3_file.close()
+        cv2.imwrite(enhanced3_file.name, enlarged3)
+        variant_files.append(enhanced3_file.name)
+        variants.append((enhanced3_file.name, 3.0, 11))
+    except Exception as exc:
+        attempts.append({"stage": "enhanced-image-preparation", "error": str(exc)})
+
+    for language in ("chi_sim+eng", "eng"):
+        combined = []
+        for variant_path, scale, psm in variants:
+            try:
+                result = subprocess.run([binary, variant_path, "stdout", "-l", language, "--psm", str(psm), "tsv"],
+                    capture_output=True, text=True, timeout=35, check=False)
+            except Exception as exc:
+                attempts.append({"language": language, "psm": psm, "scale": scale, "error": str(exc)})
+                continue
+            if result.returncode != 0:
+                attempts.append({"language": language, "psm": psm, "scale": scale, "returnCode": result.returncode, "stderr": (result.stderr or "")[-500:]})
+                continue
+            combined.extend(parse_tsv(result.stdout, language, psm, scale))
+
+        # Merge only spatially overlapping detections; prefer longer text at the same location,
+        # then confidence. Keep distinct nearby labels as separate evidence.
+        merged = []
+        for candidate in sorted(combined, key=lambda item: (item["center"]["y"], item["center"]["x"])):
+            match_index = None
+            for index, existing in enumerate(merged):
+                dx = abs(candidate["center"]["x"] - existing["center"]["x"])
+                dy = abs(candidate["center"]["y"] - existing["center"]["y"])
+                overlap_x = min(candidate["x"] + candidate["width"], existing["x"] + existing["width"]) - max(candidate["x"], existing["x"])
+                overlap_y = min(candidate["y"] + candidate["height"], existing["y"] + existing["height"]) - max(candidate["y"], existing["y"])
+                if dx <= 16 and dy <= max(12, min(candidate["height"], existing["height"])) and overlap_x > 0 and overlap_y > 0:
+                    match_index = index
+                    break
+            if match_index is None:
+                merged.append(candidate)
+            else:
+                existing = merged[match_index]
+                candidate_score = (1 if is_room_label(candidate["text"]) else 0, len(candidate["text"]), candidate["confidence"])
+                existing_score = (1 if is_room_label(existing["text"]) else 0, len(existing["text"]), existing["confidence"])
+                if candidate_score > existing_score:
+                    merged[match_index] = candidate
+
+        if merged:
+            for variant_file in variant_files:
+                try:
+                    os.remove(variant_file)
+                except OSError:
+                    pass
+            return merged, {
+                "available": True, "engine": "tesseract", "language": language,
+                "variants": [{"scale": scale, "pageSegmentationMode": psm} for _, scale, psm in variants],
+                "candidateCount": len(merged), "attempts": attempts
+            }
+    for variant_file in variant_files:
+        try:
+            os.remove(variant_file)
+        except OSError:
+            pass
+    return [], {"available": False, "engine": "tesseract", "error": "tesseract_execution_failed", "attempts": attempts}
+
+ocr_candidates, ocr_status = extract_ocr_candidates(image_path)
+
 line_items = []
 if lines is not None:
     for i, line in enumerate(lines[:160]):
-        x1, y1, x2, y2 = [int(v) for v in line[0]]
+        # OpenCV builds may return Hough lines as either (N, 1, 4) or (N, 4).
+        # Flatten each row instead of assuming the legacy nested shape.
+        coordinates = np.asarray(line).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
         if length < 20:
             continue
         orientation = "horizontal" if abs(angle) < 12 or abs(abs(angle) - 180) < 12 else ("vertical" if abs(abs(angle) - 90) < 12 else "diagonal")
+        # Sample original pixels along the candidate stroke. Keep appearance as evidence,
+        # not as a semantic label: dark lines can still be annotations or furniture.
+        luminance_samples = []
+        color_samples = []
+        background_samples = []
+        for sample_index in range(21):
+            t = sample_index / 20.0
+            sx = int(round(x1 + (x2 - x1) * t))
+            sy = int(round(y1 + (y2 - y1) * t))
+            if not (0 <= sx < w and 0 <= sy < h):
+                continue
+            y0, y1b = max(0, sy - 2), min(h, sy + 3)
+            x0, x1b = max(0, sx - 2), min(w, sx + 3)
+            luminance_samples.extend(gray[y0:y1b, x0:x1b].reshape(-1).astype(float).tolist())
+            color_samples.append(image[sy, sx].astype(float))
+            nx = int(round(sx + (y2 - y1) / max(length, 1) * 4))
+            ny = int(round(sy - (x2 - x1) / max(length, 1) * 4))
+            nx, ny = min(w - 1, max(0, nx)), min(h - 1, max(0, ny))
+            background_samples.append(float(gray[ny, nx]))
+        if luminance_samples:
+            sorted_luma = sorted(luminance_samples)
+            center_luma = float(np.mean([gray[int(round(y1 + (y2-y1)*k/20)), int(round(x1 + (x2-x1)*k/20))] for k in range(21)]))
+            mean_luma = float(np.mean(luminance_samples))
+            std_luma = float(np.std(luminance_samples))
+            dark_ratio = float(np.mean(np.asarray(luminance_samples) < 150))
+            bg_luma = float(np.mean(background_samples)) if background_samples else 255.0
+            bgr = np.mean(np.asarray(color_samples), axis=0).tolist() if color_samples else [0, 0, 0]
+            appearance = {
+                "colorSpace": "gray+luminance+meanBGR",
+                "meanLuminance": round(mean_luma, 2),
+                "medianLuminance": round(float(np.median(luminance_samples)), 2),
+                "luminanceP10": round(float(np.percentile(luminance_samples, 10)), 2),
+                "luminanceP90": round(float(np.percentile(luminance_samples, 90)), 2),
+                "luminanceStdDev": round(std_luma, 2),
+                "darkPixelRatio": round(dark_ratio, 4),
+                "centerLuminance": round(center_luma, 2),
+                "nearbyBackgroundLuminance": round(bg_luma, 2),
+                "centerBackgroundContrast": round(abs(center_luma - bg_luma), 2),
+                "meanBGR": [round(float(v), 2) for v in bgr],
+                "sampleCount": len(luminance_samples),
+                "interpretation": "appearance evidence only; not a wall/object label"
+            }
+        else:
+            appearance = None
         line_items.append({
             "id": "line-%d" % (i + 1),
             "start": {"x": x1, "y": y1},
@@ -136,8 +397,59 @@ if lines is not None:
             "angle": round(angle, 2),
             "orientation": orientation,
             "source": "hough-edge",
-            "confidence": round(0.58 + min(0.22, length / max(w, h) * 0.35), 3)
+            "confidence": round(0.58 + min(0.22, length / max(w, h) * 0.35), 3),
+            "appearance": appearance
         })
+
+def sample_line_appearance(start, end, thickness):
+    # Sample the source raster along morphology-derived wall-band candidates too.
+    # Hough lines already carry appearance data; without this shared sampler,
+    # the stronger structural candidates lose the light/dark/color evidence.
+    x1, y1 = float(start["x"]), float(start["y"])
+    x2, y2 = float(end["x"]), float(end["y"])
+    length = max(1.0, math.hypot(x2 - x1, y2 - y1))
+    center_luma = []
+    neighborhood_luma = []
+    color_samples = []
+    # Use the measured band thickness to step beyond the candidate itself.
+    # A fixed 8 px cap can leave the "background" sample inside thick walls.
+    half_width = max(2, min(32, int(math.ceil(max(1.0, float(thickness)) / 2.0))))
+    background_sample_offset = half_width + 3
+    for index in range(31):
+        t = index / 30.0
+        sx = int(round(x1 + (x2 - x1) * t))
+        sy = int(round(y1 + (y2 - y1) * t))
+        if not (0 <= sx < w and 0 <= sy < h):
+            continue
+        center_luma.append(float(gray[sy, sx]))
+        color_samples.append(image[sy, sx].astype(float))
+        # Sample both sides of the candidate stroke as local background evidence.
+        nx = -(y2 - y1) / length
+        ny = (x2 - x1) / length
+        for sign in (-1, 1):
+            bx = min(w - 1, max(0, int(round(sx + sign * nx * background_sample_offset))))
+            by = min(h - 1, max(0, int(round(sy + sign * ny * (half_width + 3)))))
+            neighborhood_luma.append(float(gray[by, bx]))
+    if not center_luma:
+        return None
+    colors = np.asarray(color_samples) if color_samples else np.zeros((1, 3))
+    center_mean = float(np.mean(center_luma))
+    background_mean = float(np.mean(neighborhood_luma)) if neighborhood_luma else 255.0
+    return {
+        "colorSpace": "gray+luminance+meanBGR",
+        "meanLuminance": round(center_mean, 2),
+        "medianLuminance": round(float(np.median(center_luma)), 2),
+        "luminanceStdDev": round(float(np.std(center_luma)), 2),
+        "darkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 150)), 4),
+        "veryDarkPixelRatio": round(float(np.mean(np.asarray(center_luma) < 95)), 4),
+        "nearbyBackgroundLuminance": round(background_mean, 2),
+        "backgroundSampleOffset": background_sample_offset,
+        "backgroundSampleCount": len(neighborhood_luma),
+        "centerBackgroundContrast": round(abs(center_mean - background_mean), 2),
+        "meanBGR": [round(float(value), 2) for value in np.mean(colors, axis=0)],
+        "sampleCount": len(center_luma),
+        "interpretation": "appearance evidence only; not a wall/object label"
+    }
 
 def extract_axis_candidates(mask, orientation):
     if orientation == "horizontal":
@@ -173,7 +485,8 @@ def extract_axis_candidates(mask, orientation):
             "orientation": orientation,
             "source": "morphology-wall-band",
             "thickness": int(max(6, thickness)),
-            "confidence": round(0.68 + min(0.22, length / max(w, h) * 0.32), 3)
+            "confidence": round(0.68 + min(0.22, length / max(w, h) * 0.32), 3),
+            "appearance": sample_line_appearance(start, end, thickness)
         })
     return candidates
 
@@ -346,6 +659,60 @@ def classify_wall_candidate(line, candidates):
         "reasons": reasons
     }
 
+def detect_dark_rectangle_candidates():
+    # Independent shape proposal pass: do not require a long wall-band response.
+    mask = cv2.threshold(gray, 92, 255, cv2.THRESH_BINARY_INV)[1]
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    candidates = []
+    # Reject tiny dimension-text/annotation blobs; these are not useful as
+    # standalone rectangle geometry and were the dominant false positives in
+    # the checked-in 1400x976 sample. Keep this independent of wall-band rules.
+    min_dimension = max(14, int(min(w, h) * 0.014))
+    min_area = max(180, int(w * h * 0.00013))
+    max_area = int(w * h * 0.12)
+    for contour in contours:
+        area = float(cv2.contourArea(contour))
+        if area < min_area or area > max_area: continue
+        x, y, bw, bh = cv2.boundingRect(contour)
+        if bw < min_dimension or bh < min_dimension: continue
+        aspect = float(max(bw, bh)) / max(1, min(bw, bh))
+        if aspect > 6.0: continue
+        perimeter = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, max(1.5, perimeter * 0.025), True)
+        if len(approx) < 4 or len(approx) > 10: continue
+        rectangularity = area / max(1.0, float(bw * bh))
+        if rectangularity < 0.48: continue
+        roi = gray[y:y+bh, x:x+bw]
+        if roi.size == 0: continue
+        dark_ratio = float(cv2.countNonZero(cv2.threshold(roi, 92, 255, cv2.THRESH_BINARY_INV)[1])) / float(roi.size)
+        if dark_ratio < 0.45: continue
+        candidates.append({
+            "id": "dark-rectangle-%d" % (len(candidates) + 1),
+            "x": int(x), "y": int(y), "width": int(bw), "height": int(bh),
+            "area": round(area, 2), "aspectRatio": round(aspect, 3),
+            "rectangularity": round(rectangularity, 3), "darkPixelRatio": round(dark_ratio, 3),
+            "polygon": [{"x": int(p[0][0]), "y": int(p[0][1])} for p in approx],
+            "confidence": round(min(0.9, 0.45 + rectangularity * 0.25 + dark_ratio * 0.2), 3),
+            "source": "dark-rectangle-contour", "semanticStatus": "unclassified"
+        })
+    # Suppress nested near-identical contours without discarding distinct symbols.
+    candidates.sort(key=lambda item: (item["rectangularity"], item["area"]), reverse=True)
+    kept = []
+    for item in candidates:
+        cx, cy = item["x"] + item["width"]/2, item["y"] + item["height"]/2
+        duplicate = False
+        for prior in kept:
+            px, py = prior["x"] + prior["width"]/2, prior["y"] + prior["height"]/2
+            if (abs(cx-px) < min(item["width"], prior["width"])*0.35 and
+                abs(cy-py) < min(item["height"], prior["height"])*0.35 and
+                abs(item["width"]-prior["width"]) < max(item["width"], prior["width"])*0.25 and
+                abs(item["height"]-prior["height"]) < max(item["height"], prior["height"])*0.25):
+                duplicate = True
+                break
+        if not duplicate: kept.append(item)
+    return kept
+
 def structural_wall_vectors(mask):
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     vectors = []
@@ -371,6 +738,150 @@ def structural_wall_vectors(mask):
             "source": "deep-black-structural-wall-mask"
         })
     return sorted(vectors, key=lambda item: item["area"], reverse=True)
+
+def detect_local_wall_segment_candidates():
+    # A second, fine-scale pass complements long wall bands. Short wall returns,
+    # nibs and wall stubs can be erased by the large kernels used for primary
+    # structural lines, so scan dark pixels with smaller directional kernels.
+    seed = cv2.bitwise_or(very_dark_closed, structural_wall_seed)
+    horizontal = cv2.morphologyEx(
+        seed, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (max(11, w // 100), 3)),
+        iterations=1
+    )
+    vertical = cv2.morphologyEx(
+        seed, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, max(11, h // 100))),
+        iterations=1
+    )
+    fine = cv2.bitwise_or(horizontal, vertical)
+    fine = cv2.morphologyEx(fine, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(fine, 8)
+    candidates = []
+    for label in range(1, count):
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        bw = int(stats[label, cv2.CC_STAT_WIDTH])
+        bh = int(stats[label, cv2.CC_STAT_HEIGHT])
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < 48 or bw < 9 or bh < 7:
+            continue
+        horizontal_like = bw >= max(10, bh * 1.35) and bh <= max(30, int(h * 0.045))
+        vertical_like = bh >= max(10, bw * 1.35) and bw <= max(30, int(w * 0.045))
+        if not (horizontal_like or vertical_like):
+            continue
+        # Require dark structural support, not merely a thin annotation stroke.
+        roi = gray[y:y+bh, x:x+bw]
+        dark_ratio = float(np.count_nonzero(roi <= 95)) / max(1, bw * bh)
+        if dark_ratio < 0.52:
+            continue
+        orientation = "horizontal" if horizontal_like else "vertical"
+        length = bw if orientation == "horizontal" else bh
+        thickness = bh if orientation == "horizontal" else bw
+        candidates.append({
+            "id": "local-wall-segment-%d" % (len(candidates) + 1),
+            "type": "short-wall-segment",
+            "orientation": orientation,
+            "x": x, "y": y, "width": bw, "height": bh,
+            "area": area, "length": length, "thickness": thickness,
+            "darkPixelRatio": round(dark_ratio, 3),
+            "confidence": round(min(0.82, 0.48 + min(0.22, dark_ratio * 0.22) + min(0.12, length / max(w, h) * 0.8)), 3),
+            "source": "fine-scale-dark-directional-scan",
+            "needsTopologyCheck": True
+        })
+    # Keep directional components separate. Unioning horizontal and vertical
+    # masks first can let a long wall absorb a short perpendicular return.
+    for direction, directional_mask in (("horizontal", horizontal), ("vertical", vertical)):
+        directional_count, _, directional_stats, _ = cv2.connectedComponentsWithStats(directional_mask, 8)
+        for directional_label in range(1, directional_count):
+            dx = int(directional_stats[directional_label, cv2.CC_STAT_LEFT])
+            dy = int(directional_stats[directional_label, cv2.CC_STAT_TOP])
+            dw = int(directional_stats[directional_label, cv2.CC_STAT_WIDTH])
+            dh = int(directional_stats[directional_label, cv2.CC_STAT_HEIGHT])
+            darea = int(directional_stats[directional_label, cv2.CC_STAT_AREA])
+            if darea < 42 or dw < 8 or dh < 6:
+                continue
+            if direction == "horizontal":
+                if dw < max(8, dh * 1.15) or dh > max(34, int(h * 0.05)):
+                    continue
+                length, thickness = dw, dh
+            else:
+                if dh < max(8, dw * 1.15) or dw > max(34, int(w * 0.05)):
+                    continue
+                length, thickness = dh, dw
+            roi = gray[dy:dy+dh, dx:dx+dw]
+            dark_ratio = float(np.count_nonzero(roi <= 95)) / max(1, dw * dh)
+            # Small annotation fragments (e.g. the Chinese room label "阳台")
+            # can pass directional morphology; require stronger dark support.
+            if dark_ratio < 0.62:
+                continue
+            # This channel is for local returns, not another detector for long
+            # wall bands already covered by structural_wall_vectors.
+            if length > max(150, int(max(w, h) * 0.14)):
+                continue
+            candidates.append({
+                "id": "directional-wall-return-%s-%d" % (direction, len(candidates) + 1),
+                "type": "short-wall-segment",
+                "orientation": direction,
+                "x": dx, "y": dy, "width": dw, "height": dh,
+                "area": darea, "length": length, "thickness": thickness,
+                "darkPixelRatio": round(dark_ratio, 3),
+                "confidence": round(min(0.76, 0.42 + min(0.22, dark_ratio * 0.22) + min(0.12, length / max(w, h))), 3),
+                "source": "separate-directional-component-scan",
+                "needsTopologyCheck": True
+            })
+    # Complement directional morphology with compact dark-block contours.
+    # This catches short wall returns attached to larger wall bands, where a
+    # connected-component pass alone can merge the stub into the full wall.
+    local_dark = cv2.inRange(gray, 0, 82)
+    local_dark = cv2.morphologyEx(
+        local_dark, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1
+    )
+    contours_local, _ = cv2.findContours(local_dark, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours_local:
+        x, y, bw, bh = cv2.boundingRect(contour)
+        area = float(cv2.contourArea(contour))
+        if area < 90 or bw < 9 or bh < 7 or bw > max(110, int(w * 0.09)) or bh > max(100, int(h * 0.10)):
+            continue
+        horizontal_like = bw >= bh * 1.15 and bh <= max(36, int(h * 0.05))
+        vertical_like = bh >= bw * 1.15 and bw <= max(36, int(w * 0.05))
+        compact_block = 0.72 <= (bw / max(1.0, bh)) <= 1.38 and bw <= 48 and bh <= 48
+        if not (horizontal_like or vertical_like or compact_block):
+            continue
+        roi = gray[y:y+bh, x:x+bw]
+        dark_ratio = float(np.count_nonzero(roi <= 82)) / max(1, bw * bh)
+        if dark_ratio < 0.68:
+            continue
+        orientation = "horizontal" if horizontal_like else ("vertical" if vertical_like else "compact")
+        length = bw if orientation == "horizontal" else bh
+        thickness = bh if orientation == "horizontal" else bw
+        candidates.append({
+            "id": "local-wall-dark-contour-%d" % (len(candidates) + 1),
+            "type": "short-wall-segment" if not compact_block else "wall-nib-or-column-candidate",
+            "orientation": orientation,
+            "x": int(x), "y": int(y), "width": int(bw), "height": int(bh),
+            "area": int(area), "length": int(length), "thickness": int(thickness),
+            "darkPixelRatio": round(dark_ratio, 3),
+            "confidence": round(min(0.78, 0.46 + min(0.2, dark_ratio * 0.2) + min(0.1, max(bw, bh) / max(w, h))), 3),
+            "source": "fine-scale-local-dark-contour",
+            "needsTopologyCheck": True
+        })
+    # Remove near-duplicates while retaining distinct adjacent short segments.
+    candidates.sort(key=lambda item: (item["confidence"], item["area"]), reverse=True)
+    kept = []
+    for item in candidates:
+        duplicate = False
+        for other in kept:
+            ix = max(0, min(item["x"] + item["width"], other["x"] + other["width"]) - max(item["x"], other["x"]))
+            iy = max(0, min(item["y"] + item["height"], other["y"] + other["height"]) - max(item["y"], other["y"]))
+            inter = ix * iy
+            if inter / max(1, min(item["area"], other["area"])) > 0.78:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(item)
+    return sorted(kept, key=lambda item: (item["y"], item["x"]))
 
 def detect_balcony_candidates():
     light_line = cv2.inRange(gray, 105, 218)
@@ -752,7 +1263,10 @@ def thin_line_candidates():
     if raw_lines is None:
         return candidates
     for raw in raw_lines[:520]:
-        x1, y1, x2, y2 = [int(v) for v in raw[0]]
+        coordinates = np.asarray(raw).reshape(-1)
+        if coordinates.size < 4:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
         length = math.hypot(x2 - x1, y2 - y1)
         if length < max(22, min(w, h) // 44) or length > max(w, h) * 0.42:
             continue
@@ -833,7 +1347,10 @@ def detect_door_symbol_candidates():
     raw_leaf_lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=28, minLineLength=max(18, min(w, h) // 55), maxLineGap=5)
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:420]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(20, min(w, h) * 0.022) or length > max(92, min(w, h) * 0.11):
                 continue
@@ -899,7 +1416,10 @@ def detect_door_symbol_candidates():
 
     if raw_leaf_lines is not None:
         for raw in raw_leaf_lines[:520]:
-            x1, y1, x2, y2 = [int(v) for v in raw[0]]
+            coordinates = np.asarray(raw).reshape(-1)
+            if coordinates.size < 4:
+                continue
+            x1, y1, x2, y2 = [int(v) for v in coordinates[:4]]
             length = math.hypot(x2 - x1, y2 - y1)
             if length < max(28, min(w, h) * 0.03) or length > max(108, min(w, h) * 0.13):
                 continue
@@ -1189,16 +1709,43 @@ def classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index):
     near_right_margin = x + bw > w * 0.84
     near_left_margin = x < w * 0.14
     compact_mark = bw <= max(80, w * 0.075) and bh <= max(76, h * 0.078)
-    tall_margin_text = near_right_margin and bh >= 38 and bw <= 70
-    tall_margin_frame = (near_right_margin or near_left_margin or near_bottom_margin) and bh >= 55 and bw <= 90
-    isolated_margin_mark = compact_mark and (near_top_margin or near_bottom_margin or near_right_margin or near_left_margin)
-    if not (isolated_margin_mark or tall_margin_text or tall_margin_frame):
+    tall_margin_text = near_right_margin and bh >= 38 and bw <= 70 and fill < 0.55
+    # A tall narrow frame at the sheet edge can be dimension text, but broad
+    # filled outlines near the left/right edge are often real balcony furniture.
+    tall_margin_frame = (near_right_margin or near_left_margin or near_bottom_margin) and bh >= 55 and bw <= 90 and fill < 0.48
+    # Do not classify every small object near a side margin as annotation:
+    # chairs and planters on balconies commonly sit against the left/right edge.
+    isolated_margin_mark = (
+        compact_mark
+        and (near_top_margin or near_bottom_margin)
+        and bw <= max(48, int(w * 0.04))
+        and bh <= max(44, int(h * 0.045))
+        and fill < 0.62
+    )
+    # Dimension strings and their long extension/measurement frames often form
+    # large thin rectangles at the top/bottom drawing margins. They must not be
+    # promoted to wardrobes/cabinets merely because they are wide and shallow.
+    margin_dimension_frame = (
+        (near_top_margin or near_bottom_margin)
+        and aspect >= 3.2
+        and bh <= max(22, int(h * 0.028))
+        and bw >= max(70, int(w * 0.05))
+    )
+    wide_margin_frame = (
+        (near_top_margin or near_bottom_margin)
+        and bw >= max(150, int(w * 0.10))
+        and bh <= max(125, int(h * 0.13))
+        and fill < 0.42
+    )
+    if not (isolated_margin_mark or tall_margin_text or tall_margin_frame or margin_dimension_frame or wide_margin_frame):
         return None
     evidence = [
         "near-drawing-margin",
         "compact-dimension-or-auxiliary-mark" if compact_mark else "",
         "right-margin-vertical-dimension-text" if tall_margin_text else "",
-        "margin-vertical-auxiliary-frame" if tall_margin_frame else ""
+        "margin-vertical-auxiliary-frame" if tall_margin_frame else "",
+        "long-thin-margin-dimension-frame" if margin_dimension_frame else "",
+        "wide-margin-outline-likely-annotation" if wide_margin_frame else ""
     ]
     return {
         "id": "annotation-symbol-%d" % candidate_index,
@@ -1217,7 +1764,7 @@ def classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index):
     }
 
 def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
-    if bw < 18 or bh < 12 or bw > w * 0.26 or bh > h * 0.22:
+    if bw < 14 or bh < 10 or bw > w * 0.26 or bh > h * 0.22:
         return None
     annotation = classify_annotation_rect(x, y, bw, bh, contour_area, candidate_index)
     if annotation:
@@ -1229,11 +1776,10 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
     symbol_type = None
     confidence = 0.42
     reasons = []
-    if 1.35 <= aspect <= 2.9 and rect_area > w * h * 0.003:
-        symbol_type = "bed"
-        confidence = 0.54 + min(0.14, rect_area / max(w * h, 1) * 8)
-        reasons.append("large-bedroom-rectangle")
-    elif aspect >= 2.5 and bh <= max(36, int(h * 0.055)) and bw >= max(70, int(w * 0.08)):
+    # Classify long, shallow furniture before large bed-like rectangles.
+    # Otherwise a wardrobe/TV cabinet with aspect 1.8-2.8 can be swallowed by
+    # the broad bed rule simply because its contour area is large.
+    if aspect >= 2.5 and bh <= max(36, int(h * 0.055)) and bw >= max(70, int(w * 0.08)):
         symbol_type = "wardrobe"
         confidence = 0.52 + min(0.12, bw / max(w, 1))
         reasons.append("long-thin-wardrobe-outline")
@@ -1241,10 +1787,18 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
         symbol_type = "cabinet"
         confidence = 0.5 + min(0.1, bw / max(w, 1))
         reasons.append("long-low-cabinet-outline")
-    elif 0.78 <= aspect <= 1.25 and 22 <= bw <= max(48, int(w * 0.055)) and 22 <= bh <= max(48, int(h * 0.055)):
-        symbol_type = "nightstand" if rect_area <= w * h * 0.001 else "chair"
-        confidence = 0.48 + min(0.08, fill)
-        reasons.append("compact-square-seat-or-bedside")
+    elif 1.35 <= aspect <= 2.9 and rect_area > w * h * 0.003:
+        symbol_type = "bed"
+        confidence = 0.54 + min(0.14, rect_area / max(w * h, 1) * 8)
+        reasons.append("large-bedroom-rectangle")
+    elif 0.78 <= aspect <= 1.25 and 18 <= bw <= max(64, int(w * 0.065)) and 16 <= bh <= max(64, int(h * 0.065)):
+        symbol_type = "nightstand_or_chair"
+        confidence = 0.46 + min(0.08, fill)
+        reasons.append("compact-square-seat-or-bedside-needs-context")
+    elif 0.72 <= aspect <= 1.38 and bw >= 14 and bh >= 10 and max(bw, bh) <= max(100, int(min(w, h) * 0.11)):
+        symbol_type = "small_table_or_fixture"
+        confidence = 0.43 + min(0.08, fill)
+        reasons.append("compact-small-closed-contour-needs-context")
     elif 1.2 <= aspect <= 3.8 and bw > 46 and bh > 18 and fill < 0.36:
         symbol_type = "sofa_or_table"
         confidence = 0.48 + min(0.12, bw / max(w, 1))
@@ -1278,7 +1832,10 @@ def classify_symbol_rect(x, y, bw, bh, area, contour_area, candidate_index):
 def detect_furniture_symbol_candidates():
     symbol_seed = cv2.bitwise_and(closed, cv2.bitwise_not(cv2.dilate(structural_wall_seed, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11)), iterations=1)))
     symbol_seed = cv2.morphologyEx(symbol_seed, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
-    contours_symbols, _ = cv2.findContours(symbol_seed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # RETR_LIST retains nested contours (e.g. a bed frame with a mattress/pillow
+    # outline, chair seat inside its frame, or a table top inside a border).
+    # The overlap deduper below still removes near-identical duplicates.
+    contours_symbols, _ = cv2.findContours(symbol_seed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     candidates = []
     annotations = []
     def overlaps_window_symbol(x, y, bw, bh):
@@ -1291,11 +1848,29 @@ def detect_furniture_symbol_candidates():
         return False
     for contour in contours_symbols:
         contour_area = float(cv2.contourArea(contour))
-        if contour_area < max(70, w * h * 0.00007):
+        # Keep smaller closed contours as proposals too: bedside tables, chairs,
+        # and compact round/square tables can be much smaller than beds/sofas.
+        # Annotation classification and spatial context downstream help reject noise.
+        if contour_area < max(42, w * h * 0.000035):
             continue
         x, y, bw, bh = cv2.boundingRect(contour)
         candidate = classify_symbol_rect(x, y, bw, bh, bw * bh, contour_area, len(candidates) + 1)
         if candidate:
+            # Preserve contour shape evidence for downstream semantic ranking.
+            # A bounding rectangle alone cannot distinguish round tables from
+            # square stools/nightstands; circularity is useful but not decisive.
+            circularity = contour_circularity(contour)
+            candidate["contourCircularity"] = round(float(circularity), 3)
+            candidate["shapeEvidence"] = []
+            if 0.78 <= (bw / max(1, bh)) <= 1.25 and circularity >= 0.62:
+                candidate["shapeEvidence"].append("near-circular-closed-contour")
+                candidate["evidence"].append("near-circular-closed-contour")
+                if candidate["type"] in ("nightstand_or_chair", "small_table_or_fixture", "table_or_fixture"):
+                    candidate["type"] = "round_table_or_stool_candidate"
+                    candidate["confidence"] = round(min(candidate["confidence"], 0.58), 3)
+                    candidate["evidence"].append("round-table-vs-stool-needs-spatial-context")
+            elif circularity <= 0.18:
+                candidate["shapeEvidence"].append("fragmented_or_highly_concave-contour")
             if candidate["source"] == "annotation-dimension-scanner":
                 annotations.append(candidate)
                 continue
@@ -1316,10 +1891,55 @@ def detect_furniture_symbol_candidates():
         if any(overlap_1d(candidate["x"], candidate["x"] + candidate["width"], item["x"], item["x"] + item["width"]) * overlap_1d(candidate["y"], candidate["y"] + candidate["height"], item["y"], item["y"] + item["height"]) > min(candidate["area"], item["area"]) * 0.62 for item in deduped):
             continue
         deduped.append(candidate)
-        if len(deduped) >= 36:
+        # Keep a wider proposal pool: furniture is often split into several
+        # contours, and the previous cap of 36 could silently drop useful items
+        # on dense plans before room-context analysis had a chance to rank them.
+        if len(deduped) >= 100:
             break
     for index, candidate in enumerate(deduped):
         candidate["id"] = "furniture-symbol-%d" % (index + 1)
+    # Add relational evidence after deduplication. A single contour often cannot
+    # tell a round table from a stool or a square table from a nightstand, but
+    # nearby seat-like symbols and repeated spacing provide useful context.
+    for candidate in deduped:
+        cx = candidate["x"] + candidate["width"] / 2
+        cy = candidate["y"] + candidate["height"] / 2
+        diagonal = max(1.0, float(np.hypot(candidate["width"], candidate["height"])))
+        neighbors = []
+        for other in deduped:
+            if other is candidate:
+                continue
+            ox = other["x"] + other["width"] / 2
+            oy = other["y"] + other["height"] / 2
+            distance = float(np.hypot(cx - ox, cy - oy))
+            other_diagonal = float(np.hypot(other["width"], other["height"]))
+            # Distance is normalized by the combined object scale, so the rule
+            # works across differently sized floor-plan exports.
+            normalized_distance = distance / max(1.0, (diagonal + other_diagonal) / 2)
+            # Keep relations local to reduce cross-room associations.
+            if normalized_distance <= 1.85:
+                neighbors.append({
+                    "candidateId": other["id"],
+                    "type": other.get("type"),
+                    "normalizedCenterDistance": round(normalized_distance, 2)
+                })
+        neighbors.sort(key=lambda item: item["normalizedCenterDistance"])
+        # Use a dedicated field: downstream room assignment owns spatialContext.
+        candidate["localFurnitureRelations"] = {
+            "nearbyFurnitureCount": len(neighbors),
+            "nearestFurniture": neighbors[:5],
+            "relationRadiusNormalized": 1.85,
+            "evidence": []
+        }
+        if candidate.get("type") == "round_table_or_stool_candidate":
+            if len(neighbors) >= 3:
+                candidate["localFurnitureRelations"]["evidence"].append("clustered-with-multiple-nearby-furniture-symbols")
+                candidate["evidence"].append("spatial-cluster-may-support-table-with-seating")
+            else:
+                candidate["localFurnitureRelations"]["evidence"].append("insufficient-nearby-symbols-to-disambiguate-round-table-and-stool")
+        if candidate.get("type") in ("table_or_fixture", "small_table_or_fixture", "round_table_or_stool_candidate"):
+            if any(item["type"] in ("chair", "nightstand_or_chair", "round_table_or_stool_candidate") for item in neighbors):
+                candidate["localFurnitureRelations"]["evidence"].append("nearby-seat-or-compact-furniture")
     for index, candidate in enumerate(annotations):
         candidate["id"] = "annotation-symbol-%d" % (index + 1)
     return deduped, annotations[:80]
@@ -1514,6 +2134,7 @@ debug_binary = output_dir + "/vision-binary.png"
 debug_walls = output_dir + "/vision-wall-bands.png"
 debug_structural_wall_mask = output_dir + "/vision-structural-wall-mask.png"
 debug_structural_wall_vectors = output_dir + "/structural-wall-vectors.svg"
+debug_dark_rectangles = output_dir + "/dark-rectangle-candidates.svg"
 debug_balcony_candidates = output_dir + "/vision-balcony-candidates.png"
 debug_room_interiors = output_dir + "/vision-room-interiors.png"
 debug_window_candidates = output_dir + "/vision-window-candidates.png"
@@ -1528,11 +2149,304 @@ cv2.imwrite(debug_walls, wall_debug)
 structural_wall_mask = cv2.dilate(structural_wall_seed, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
 cv2.imwrite(debug_structural_wall_mask, structural_wall_mask)
 wall_vectors = structural_wall_vectors(structural_wall_mask)
+local_wall_segment_candidates = detect_local_wall_segment_candidates()
+# Inspect junctions between independently detected horizontal and vertical dark
+# structures. Short wall returns can be fused into a long wall component and
+# therefore disappear from connected-component candidates; junction ROIs keep
+# those locations visible for downstream topology checks.
+wall_junction_mask = cv2.bitwise_and(structural_horizontal, structural_vertical)
+wall_junction_mask = cv2.dilate(wall_junction_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=1)
+junction_count, _, junction_stats, _ = cv2.connectedComponentsWithStats(wall_junction_mask, 8)
+wall_junction_candidates = []
+for junction_label in range(1, junction_count):
+    jx = int(junction_stats[junction_label, cv2.CC_STAT_LEFT])
+    jy = int(junction_stats[junction_label, cv2.CC_STAT_TOP])
+    jw = int(junction_stats[junction_label, cv2.CC_STAT_WIDTH])
+    jh = int(junction_stats[junction_label, cv2.CC_STAT_HEIGHT])
+    jarea = int(junction_stats[junction_label, cv2.CC_STAT_AREA])
+    if jarea < 9 or jw > max(70, int(w * 0.06)) or jh > max(70, int(h * 0.07)):
+        continue
+    wall_junction_candidates.append({
+        "id": "wall-junction-%d" % (len(wall_junction_candidates) + 1),
+        "type": "wall-junction-or-return",
+        "x": jx, "y": jy, "width": jw, "height": jh,
+        "area": jarea,
+        "confidence": 0.55,
+        "source": "horizontal-vertical-structural-mask-intersection",
+        "needsTopologyCheck": True
+    })
+# Enrich junctions with geometric support from independently scanned short
+# segments and the main structural vectors. Keep raw candidates intact; this is
+# evidence for downstream review, not an automatic wall merge.
+for junction in wall_junction_candidates:
+    jx1, jy1 = junction["x"], junction["y"]
+    jx2, jy2 = jx1 + junction["width"], jy1 + junction["height"]
+    local_support = []
+    for segment in local_wall_segment_candidates:
+        sx1, sy1 = segment["x"], segment["y"]
+        sx2, sy2 = sx1 + segment["width"], sy1 + segment["height"]
+        ix = max(0, min(jx2, sx2) - max(jx1, sx1))
+        iy = max(0, min(jy2, sy2) - max(jy1, sy1))
+        if ix > 0 and iy > 0:
+            local_support.append({
+                "candidateId": segment["id"],
+                "orientation": segment.get("orientation"),
+                "overlapArea": int(ix * iy),
+                "confidence": segment.get("confidence", 0.5)
+            })
+    vector_support = []
+    for vector in wall_vectors:
+        vx1, vy1 = vector["x"], vector["y"]
+        vx2, vy2 = vx1 + vector["width"], vy1 + vector["height"]
+        ix = max(0, min(jx2, vx2) - max(jx1, vx1))
+        iy = max(0, min(jy2, vy2) - max(jy1, vy1))
+        if ix > 0 and iy > 0:
+            vector_support.append({
+                "candidateId": vector["id"],
+                "overlapArea": int(ix * iy),
+                "confidence": vector.get("confidence", 0.5)
+            })
+    junction["supportingLocalWallSegments"] = sorted(local_support, key=lambda item: item["overlapArea"], reverse=True)[:4]
+    junction["supportingStructuralVectors"] = sorted(vector_support, key=lambda item: item["overlapArea"], reverse=True)[:4]
+    support_score = min(0.18, 0.06 * len(local_support)) + min(0.12, 0.04 * len(vector_support))
+    junction["geometryEvidenceScore"] = round(support_score, 3)
+    junction["reviewPriority"] = "high" if local_support and vector_support else ("medium" if local_support or vector_support else "low")
+debug_wall_junction_overlay = output_dir + "/vision-wall-junctions-overlay.jpg"
+wall_junction_overlay = image.copy()
+for item in wall_junction_candidates:
+    x1, y1 = item["x"], item["y"]
+    x2, y2 = x1 + item["width"], y1 + item["height"]
+    cv2.rectangle(wall_junction_overlay, (x1, y1), (x2, y2), (0, 220, 0), 2)
+    cv2.putText(wall_junction_overlay, item["id"], (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.32, (0, 160, 0), 1, cv2.LINE_AA)
+cv2.imwrite(debug_wall_junction_overlay, wall_junction_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+debug_local_wall_segments = output_dir + "/vision-local-wall-segments.png"
+local_wall_debug = np.zeros_like(gray)
+local_wall_overlay = image.copy()
+for item in local_wall_segment_candidates:
+    x1, y1 = item["x"], item["y"]
+    x2, y2 = x1 + item["width"], y1 + item["height"]
+    cv2.rectangle(local_wall_debug, (x1, y1), (x2, y2), 255, 2)
+    color = (0, 180, 255) if item.get("orientation") == "compact" else (255, 80, 0)
+    cv2.rectangle(local_wall_overlay, (x1, y1), (x2, y2), color, 2)
+    label = "%s %.2f" % (item.get("orientation", "?"), item.get("confidence", 0))
+    cv2.putText(local_wall_overlay, label, (x1, max(12, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.36, color, 1, cv2.LINE_AA)
+cv2.imwrite(debug_local_wall_segments, local_wall_debug)
+debug_local_wall_overlay = output_dir + "/vision-local-wall-segments-overlay.jpg"
+cv2.imwrite(debug_local_wall_overlay, local_wall_overlay, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+dark_rectangle_candidates = detect_dark_rectangle_candidates()
 balcony_candidates, balcony_outline = detect_balcony_candidates()
 room_interior_candidates, room_interiors_debug = detect_room_interior_candidates()
 window_symbol_candidates = detect_window_symbol_candidates()
 door_symbol_candidates = detect_door_symbol_candidates()
 furniture_symbol_candidates, annotation_symbol_candidates = detect_furniture_symbol_candidates()
+
+# Run focused OCR over geometry-derived room and balcony regions. Full-image OCR
+# often misses small labels beside furniture; region crops increase text scale
+# while preserving image-coordinate evidence for downstream containment checks.
+def augment_ocr_from_region_crops(candidates, regions):
+    binary = shutil.which("tesseract")
+    if not binary:
+        return candidates, {"regionCropCount": 0, "regionLabelCount": 0, "error": "tesseract_not_installed"}
+    pattern = re.compile(r"^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九0-9]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间)$")
+    results = list(candidates or [])
+    crops = 0
+    found = 0
+    seen = set()
+    for region in regions or []:
+        try:
+            x = max(0, int(region.get("x", 0)))
+            y = max(0, int(region.get("y", 0)))
+            width = int(region.get("width", 0))
+            height = int(region.get("height", 0))
+            if width < 30 or height < 20 or x >= w or y >= h:
+                continue
+            x2, y2 = min(w, x + width), min(h, y + height)
+            crop = gray[y:y2, x:x2]
+            if crop.size == 0:
+                continue
+            crop = cv2.copyMakeBorder(crop, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=255)
+            crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            tmp = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-region-", suffix=".png", delete=False)
+            tmp.close()
+            cv2.imwrite(tmp.name, crop)
+            crops += 1
+            try:
+                region_found_before = found
+                for psm in (11, 6):
+                    result = subprocess.run([binary, tmp.name, "stdout", "-l", "chi_sim+eng", "--psm", str(psm), "tsv"],
+                        capture_output=True, text=True, timeout=12, check=False)
+                    if result.returncode != 0:
+                        continue
+                    grouped = {}
+                    for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\t"):
+                        if row.get("level") != "5":
+                            continue
+                        word = (row.get("text") or "").strip().strip("|.,:;，。；：、!！?？“”‘’()（）{}")
+                        if not word:
+                            continue
+                        try:
+                            confidence = float(row.get("conf") or -1)
+                            bx, by = int(row.get("left") or 0), int(row.get("top") or 0)
+                            bw, bh = int(row.get("width") or 0), int(row.get("height") or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        key = (row.get("block_num"), row.get("par_num"), row.get("line_num"))
+                        item = grouped.setdefault(key, {"words": [], "x1": bx, "y1": by, "x2": bx+bw, "y2": by+bh, "conf": []})
+                        item["words"].append(word)
+                        item["x1"], item["y1"] = min(item["x1"], bx), min(item["y1"], by)
+                        item["x2"], item["y2"] = max(item["x2"], bx+bw), max(item["y2"], by+bh)
+                        item["conf"].append(confidence)
+                    for item in grouped.values():
+                        joined = "".join(item["words"])
+                        if not pattern.fullmatch(joined):
+                            continue
+                        confidence = round(sum(item["conf"]) / max(1, len(item["conf"])) / 100, 3)
+                        cx = x + (item["x1"] + item["x2"]) / 6.0 - 8/3
+                        cy = y + (item["y1"] + item["y2"]) / 6.0 - 8/3
+                        key = (joined, round(cx / 8), round(cy / 8))
+                        if key in seen:
+                            continue
+                        near_existing = any(
+                            str(existing.get("text", "")).strip() == joined
+                            and math.hypot(
+                                float((existing.get("center") or {}).get("x", existing.get("x", 0))) - cx,
+                                float((existing.get("center") or {}).get("y", existing.get("y", 0))) - cy
+                            ) <= 40
+                            for existing in results
+                        )
+                        if near_existing:
+                            continue
+                        seen.add(key)
+                        results.append({
+                            "id": "tesseract-region-%s-%d" % (region.get("id", "candidate"), len(results) + 1),
+                            "text": joined,
+                            "x": max(0, x + item["x1"] / 3.0 - 8/3),
+                            "y": max(0, y + item["y1"] / 3.0 - 8/3),
+                            "width": max(1, (item["x2"] - item["x1"]) / 3.0),
+                            "height": max(1, (item["y2"] - item["y1"]) / 3.0),
+                            "center": {"x": cx, "y": cy},
+                            "confidence": confidence,
+                            "source": "tesseract:room-region:psm%d" % psm,
+                            "evidence": {"engine": "tesseract", "regionId": region.get("id"), "regionSource": region.get("source"), "pageSegmentationMode": psm}
+                        })
+                        found += 1
+                    if found > region_found_before:
+                        break
+            finally:
+                try:
+                    os.remove(tmp.name)
+                except OSError:
+                    pass
+        except Exception:
+            continue
+    return results, {"regionCropCount": crops, "regionLabelCount": found, "regionSource": "room-interior-and-balcony-candidates"}
+
+expanded_balcony_ocr_regions = [
+    {**region,
+     "x": max(0, int(region["x"] - region["width"])),
+     "y": max(0, int(region["y"] - region["height"])),
+     "width": int(region["width"] * 3),
+     "height": int(region["height"] * 3),
+     "source": "expanded-" + str(region.get("source", "balcony-candidate"))}
+    for region in balcony_candidates
+]
+ocr_candidates, region_ocr_status = augment_ocr_from_region_crops(
+    ocr_candidates, room_interior_candidates + expanded_balcony_ocr_regions
+)
+ocr_status["regionOcr"] = region_ocr_status
+ocr_status["candidateCount"] = len(ocr_candidates)
+
+# Add explicit spatial evidence after raw scanning. This does not claim semantic
+# certainty; it records which room contains each candidate and its nearest
+# neighboring objects so downstream analysis can reason about the full layout.
+def enrich_symbol_spatial_context(candidates, rooms, peers):
+    def center_of(item):
+        return (item["x"] + item["width"] / 2.0, item["y"] + item["height"] / 2.0)
+    for item in candidates:
+        cx, cy = center_of(item)
+        containing = []
+        for room in rooms:
+            rx, ry = room["x"], room["y"]
+            rw, rh = room["width"], room["height"]
+            if rx <= cx <= rx + rw and ry <= cy <= ry + rh:
+                containing.append(room)
+        if containing:
+            # Room-interior extraction can produce overlapping grid cells as well
+            # as true room regions. Do not silently treat the smallest rectangle
+            # as the room: retain alternatives and mark ambiguous assignments.
+            ranked_rooms = sorted(
+                containing,
+                key=lambda value: (
+                    float(value.get("perimeterWallScore", 0.0)),
+                    float(value.get("confidence", 0.5)),
+                    -float(value.get("width", 0) * value.get("height", 0))
+                ),
+                reverse=True
+            )
+            room = ranked_rooms[0]
+            ambiguous = len(ranked_rooms) > 1 and (
+                float(ranked_rooms[0].get("confidence", 0.5))
+                - float(ranked_rooms[1].get("confidence", 0.5))
+            ) < 0.08 and not ranked_rooms[0].get("perimeterWallScore")
+            item["spatialContext"] = {
+                "roomCandidateId": room.get("id"),
+                "roomAssignment": "ambiguous-overlapping-room-candidates" if ambiguous else "center-contained",
+                "roomConfidence": round(float(room.get("confidence", 0.5)) * (0.72 if ambiguous else 1.0), 3),
+                "containingRoomCandidates": [
+                    {
+                        "id": candidate.get("id"),
+                        "confidence": round(float(candidate.get("confidence", 0.5)), 3),
+                        "area": int(candidate.get("width", 0) * candidate.get("height", 0)),
+                        "perimeterWallScore": candidate.get("perimeterWallScore")
+                    }
+                    for candidate in ranked_rooms[:5]
+                ]
+            }
+        else:
+            distances = []
+            for room in rooms:
+                rx, ry = room["x"], room["y"]
+                rw, rh = room["width"], room["height"]
+                dx = max(rx - cx, 0, cx - (rx + rw))
+                dy = max(ry - cy, 0, cy - (ry + rh))
+                distances.append((math.hypot(dx, dy), room))
+            distances.sort(key=lambda pair: pair[0])
+            nearest = distances[0] if distances else None
+            item["spatialContext"] = {
+                "roomCandidateId": nearest[1].get("id") if nearest else None,
+                "roomAssignment": "nearest-room-review" if nearest else "unassigned",
+                "roomDistance": round(nearest[0], 1) if nearest else None,
+                "roomConfidence": round(float(nearest[1].get("confidence", 0.5)) * 0.5, 3) if nearest else 0
+            }
+        nearby = []
+        for other in peers:
+            if other is item:
+                continue
+            ox, oy = center_of(other)
+            distance = math.hypot(cx - ox, cy - oy)
+            scale = max(1.0, math.hypot(item["width"], item["height"]) + math.hypot(other["width"], other["height"]))
+            if distance <= max(72.0, scale * 1.35):
+                nearby.append({
+                    "id": other.get("id"),
+                    "type": other.get("type", "unknown"),
+                    "distance": round(distance, 1),
+                    "relation": "overlap" if (
+                        overlap_1d(item["x"], item["x"] + item["width"], other["x"], other["x"] + other["width"]) > 0
+                        and overlap_1d(item["y"], item["y"] + item["height"], other["y"], other["y"] + other["height"]) > 0
+                    ) else "nearby"
+                })
+        item["spatialContext"]["nearbyObjectCandidates"] = sorted(nearby, key=lambda value: value["distance"])[:8]
+
+enrich_symbol_spatial_context(
+    furniture_symbol_candidates,
+    room_interior_candidates,
+    furniture_symbol_candidates + door_symbol_candidates + window_symbol_candidates
+)
+enrich_symbol_spatial_context(
+    annotation_symbol_candidates,
+    room_interior_candidates,
+    annotation_symbol_candidates + furniture_symbol_candidates
+)
 mep_symbol_candidates, electrical_symbol_candidates = detect_mep_electrical_candidates()
 cv2.imwrite(debug_room_interiors, room_interiors_debug)
 balcony_debug = image.copy()
@@ -1598,6 +2512,14 @@ for candidate in electrical_symbol_candidates:
     cv2.putText(symbol_debug, "elec:%s %.2f" % (candidate["type"], candidate["confidence"]), (candidate["x"], max(24, candidate["y"] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 2, cv2.LINE_AA)
 cv2.imwrite(debug_symbol_candidates, symbol_debug)
 
+rectangle_svg_paths = []
+for item in dark_rectangle_candidates:
+    x, y, bw, bh = item["x"], item["y"], item["width"], item["height"]
+    rectangle_svg_paths.append('<rect x="%d" y="%d" width="%d" height="%d" fill="none" stroke="#f59e0b" stroke-width="3"/><text x="%d" y="%d" font-size="14" fill="#f59e0b">%s</text>' % (x, y, bw, bh, x, max(14, y-3), item["id"]))
+rectangle_svg = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg"><image href="./recognition-input.jpg" x="0" y="0" width="%d" height="%d"/>%s</svg>''' % (w, h, w, h, w, h, "\\n".join(rectangle_svg_paths))
+open(debug_dark_rectangles, "w", encoding="utf-8").write(rectangle_svg)
+
 vector_svg_paths = []
 for wall in wall_vectors:
     points = wall["polygon"]
@@ -1624,6 +2546,12 @@ print(json.dumps({
         "rejectedWallBandCount": len(rejected_axis_candidates),
         "structuralWallVectorCount": len(wall_vectors),
         "structuralWallVectors": wall_vectors,
+        "localWallSegmentCandidateCount": len(local_wall_segment_candidates),
+        "localWallSegmentCandidates": local_wall_segment_candidates,
+        "wallJunctionCandidateCount": len(wall_junction_candidates),
+        "wallJunctionCandidates": wall_junction_candidates,
+        "darkRectangleCandidateCount": len(dark_rectangle_candidates),
+        "darkRectangleCandidates": dark_rectangle_candidates,
         "balconyCandidateCount": len(balcony_candidates),
         "balconyCandidates": balcony_candidates,
         "roomInteriorCandidateCount": len(room_interior_candidates),
@@ -1641,8 +2569,9 @@ print(json.dumps({
         "annotationSymbolCandidateCount": len(annotation_symbol_candidates),
         "annotationSymbolCandidates": annotation_symbol_candidates
     },
-    "ocrCandidates": [],
-    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
+    "ocrCandidates": ocr_candidates,
+    "ocrStatus": ocr_status,
+    "debugImages": {"edges": debug_edges, "binary": debug_binary, "wallBands": debug_walls, "structuralWallMask": debug_structural_wall_mask, "structuralWallVectors": debug_structural_wall_vectors, "localWallSegments": debug_local_wall_segments, "localWallSegmentOverlay": debug_local_wall_overlay, "wallJunctionOverlay": debug_wall_junction_overlay, "darkRectangleCandidates": debug_dark_rectangles, "balconyCandidates": debug_balcony_candidates, "roomInteriors": debug_room_interiors, "windowCandidates": debug_window_candidates, "doorCandidates": debug_door_candidates, "symbolCandidates": debug_symbol_candidates}
 }, ensure_ascii=False))
 `;
 
@@ -1656,18 +2585,39 @@ print(json.dumps({
     'python'
   ].filter(Boolean);
 
-  for (const command of pythonCommands) {
+  const attempts = [];
+  for (const command of [...new Set(pythonCommands)]) {
     const result = run(command, [scriptPath, sourcePath, outputDir], { timeout: 45000 });
     if (result.status === 0 && result.stdout.trim()) {
       try {
-        return JSON.parse(result.stdout.trim());
+        const parsed = JSON.parse(result.stdout.trim());
+        if (parsed.available) return { ...parsed, pythonCommand: command };
+        attempts.push({ command, error: parsed.error || 'vision_unavailable' });
       } catch (error) {
-        return { available: false, error: error.message, raw: result.stdout.trim() };
+        attempts.push({
+          command,
+          error: `invalid_json: ${error.message}`,
+          stdout: String(result.stdout || '').slice(0, 500),
+          stderr: String(result.stderr || '').slice(0, 1000)
+        });
       }
+    } else {
+      attempts.push({
+        command,
+        status: result.status,
+        signal: result.signal || '',
+        error: result.error?.message || '',
+        stderr: String(result.stderr || '').slice(-2000),
+        stdout: String(result.stdout || '').slice(-500)
+      });
     }
   }
 
-  return { available: false, error: 'python_or_opencv_unavailable' };
+  return {
+    available: false,
+    error: attempts.length ? 'python_vision_failed' : 'python_or_opencv_unavailable',
+    attempts
+  };
 }
 
 function buildPayload(job, sourcePath, outputDir) {
@@ -1709,9 +2659,12 @@ function buildPayload(job, sourcePath, outputDir) {
       ...(job?.job?.input_payload?.ocrCandidates || []),
       ...(job?.job?.input_payload?.roomLabels || [])
     ],
+    ocrStatus: vision.ocrStatus || { available: false, error: 'vision_unavailable' },
     debugImages: vision.debugImages || {},
     visionAvailable: Boolean(vision.available),
+    visionPythonCommand: vision.pythonCommand || '',
     visionError: vision.available ? '' : (vision.error || ''),
+    visionAttempts: vision.available ? [] : (vision.attempts || []),
     jobHints: {
       sourceType: job?.job?.source_type || job?.job?.input_payload?.sourceType || 'digital',
       processNotes: job?.job?.input_payload?.processNotes || ''

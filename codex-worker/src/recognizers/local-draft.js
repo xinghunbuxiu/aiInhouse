@@ -11,6 +11,7 @@ const {
   attachMlWallsToPreprocessing
 } = require('./ml-wall-command');
 const { repairRecognitionTopology } = require('./topology');
+const { validateFloorplanDraft } = require('./spatial-reasoning');
 const { summarizeRecognitionAssetsForDraft } = require('../assets/recognition-assets');
 const {
   annotatePreprocessingWithAssets,
@@ -68,8 +69,12 @@ function normalizeOcrText(text = '') {
 }
 
 function normalizeOcrCandidate(candidate = {}) {
-  const text = normalizeOcrText(candidate.text || candidate.label || candidate.name || candidate.value);
-  if (!text) {
+  const rawText = normalizeOcrText(candidate.text || candidate.label || candidate.name || candidate.value);
+  const text = rawText.replace(/^[|.,:;，。；：、!！?？"'“”‘’()（）【】{}]+|[|.,:;，。；：、!！?？"'“”‘’()（）【】{}]+$/g, '');
+  const roomLabelPattern = /^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九\d]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间|living\s*room|bedroom|kitchen|bathroom|dining\s*room|balcony|foyer)$/i;
+  // OCR may join two adjacent labels or dimensions into one text line. Do not
+  // assign such a mixed line to a room merely because it contains one keyword.
+  if (!text || !roomLabelPattern.test(text)) {
     return null;
   }
 
@@ -91,7 +96,9 @@ function normalizeOcrCandidate(candidate = {}) {
       y: toNumber(center.y, height ? y + height / 2 : y)
     },
     confidence: toNumber(candidate.confidence, 0.72),
-    source: candidate.source || 'ocr-candidate'
+    source: candidate.source || 'ocr-candidate',
+    candidateId: candidate.id || candidate.candidateId || null,
+    box: { x, y, width, height }
   };
 }
 
@@ -130,11 +137,14 @@ function assignOcrSemantics(geometryRooms = [], ocrCandidates = []) {
       }
       const inside = roomContainsPoint(room, label.center);
       const distance = Math.hypot(roomCenterPoint.x - label.center.x, roomCenterPoint.y - label.center.y);
-      const maxDistance = Math.hypot(toNumber(room.width), toNumber(room.height)) * 0.75;
-      if (!inside && distance > maxDistance) {
+
+      // Room semantics must come from a label physically inside that room.
+      // Distance-only matching caused labels in elevator shafts, corridors, or
+      // neighboring rooms to leak across boundaries and misclassify the room.
+      if (!inside) {
         continue;
       }
-      const score = (inside ? 2 : 0) + Math.max(0, 1 - distance / Math.max(maxDistance, 1)) + label.confidence * 0.3;
+      const score = 2 + label.confidence * 0.3 - distance / Math.max(Math.hypot(toNumber(room.width), toNumber(room.height)), 1);
       if (!best || score > best.score) {
         best = { label, score, distance, inside };
       }
@@ -155,6 +165,10 @@ function assignOcrSemantics(geometryRooms = [], ocrCandidates = []) {
         ...(room.sourceEvidence || {}),
         ocrText: best.label.text,
         ocrSource: best.label.source,
+        ocrCandidateId: best.label.candidateId,
+        ocrBox: best.label.box,
+        ocrCenter: best.label.center,
+        ocrConfidence: best.label.confidence,
         ocrDistance: Number(best.distance.toFixed(1)),
         ocrInsideRoom: best.inside
       }
@@ -658,6 +672,16 @@ function buildWallsFromGeometryCandidates(preprocessing = {}) {
       sourceCandidateId: line.id || '',
       wallEvidence: line.wallEvidence || null,
       assetMatch: line.assetMatch || null,
+      // Carry measured raster appearance into the final wall evidence so spatial
+      // review can explain a gap with traceable source pixels, without promoting
+      // darkness/contrast into a semantic wall label.
+      sourceEvidence: {
+        sourceCandidateId: line.id || '',
+        appearance: line.appearance || null,
+        wallEvidence: line.wallEvidence || null,
+        assetMatch: line.assetMatch || null
+      },
+      appearance: line.appearance || null,
       orientation: line.orientation
     }));
 }
@@ -870,7 +894,13 @@ function selectRoomCandidates(candidates = [], maxRooms = 12) {
 
   const selected = [];
   for (const candidate of ordered) {
-    if (selected.some((room) => overlapsRoom(candidate, room) > (isWallMaskInteriorRoom(candidate) || isWallMaskInteriorRoom(room) ? 0.58 : 0.82))) {
+    // Wall-mask interiors should represent disjoint room regions. A large
+    // intersection is more likely a duplicate/partial segmentation than two
+    // real rooms; the previous 0.58 threshold allowed substantial overlaps
+    // through to the final draft (including balcony/bathroom intersections).
+    const wallMaskPair = isWallMaskInteriorRoom(candidate) || selected.some(isWallMaskInteriorRoom);
+    const overlapLimit = wallMaskPair ? 0.3 : 0.55;
+    if (selected.some((room) => overlapsRoom(candidate, room) > overlapLimit)) {
       continue;
     }
     if (selected.some((room) => isRoomCandidateContained(candidate, room) && (room.sourceEvidence?.edgeScore || 0) >= (candidate.sourceEvidence?.edgeScore || 0) + 0.12)) {
@@ -1300,6 +1330,9 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
       if (room.sourceEvidence?.ocrText || room.type !== label.type || room.boundaryNeedsReview || room.sourceEvidence?.boundaryNeedsReview) {
         continue;
       }
+      if (!roomContainsPoint(room, label.center)) {
+        continue;
+      }
       const center = roomCenter(room);
       const distance = Math.hypot(center.x - label.center.x, center.y - label.center.y);
       if (distance > maxRelabelDistance) {
@@ -1322,6 +1355,10 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
           ...(supplemented[index].sourceEvidence || {}),
           ocrText: label.text,
           ocrSource: label.source,
+          ocrCandidateId: label.candidateId,
+          ocrBox: label.box,
+          ocrCenter: label.center,
+          ocrConfidence: label.confidence,
           ocrDistance: Number(relabelCandidate.distance.toFixed(1)),
           ocrRelabeledSameTypeRoom: true
         }
@@ -1368,6 +1405,10 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
         ...(best.template.sourceEvidence || {}),
         ocrText: label.text,
         ocrSource: label.source,
+        ocrCandidateId: label.candidateId,
+        ocrBox: label.box,
+        ocrCenter: label.center,
+        ocrConfidence: label.confidence,
         ocrSupplementedBecause: 'label-without-stable-geometry-room',
         semanticTemplateRoomId: best.template.id,
         semanticTemplateDistance: Number(best.distance.toFixed(1)),
@@ -1562,7 +1603,7 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
     const existingDistance = existingCenter
       ? Math.hypot(existingCenter.x - label.center.x, existingCenter.y - label.center.y)
       : Infinity;
-    if (existing && (roomContainsPoint(existing, label.center, 24) || existingDistance <= Math.hypot(toNumber(existing.width), toNumber(existing.height)) * 0.85)) {
+    if (existing && roomContainsPoint(existing, label.center)) {
       if (!existing.sourceEvidence?.ocrText) {
         const { semanticNeedsReview, ...roomWithoutSemanticReview } = existing;
         const { semanticNeedsReview: evidenceSemanticNeedsReview, ...sourceEvidence } = existing.sourceEvidence || {};
@@ -1576,8 +1617,12 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
             ...sourceEvidence,
             ocrText: label.text,
             ocrSource: label.source,
+            ocrCandidateId: label.candidateId,
+            ocrBox: label.box,
+            ocrCenter: label.center,
+            ocrConfidence: label.confidence,
             ocrDistance: Number(existingDistance.toFixed(1)),
-            ocrInsideRoom: roomContainsPoint(existing, label.center, 24),
+            ocrInsideRoom: true,
             ocrConfirmedExistingRoom: true
           }
         };
@@ -1590,13 +1635,13 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
       if (candidate.type && candidate.type !== 'space') {
         continue;
       }
-      const labelInside = roomContainsPoint(candidate, label.center, 28);
+      const labelInside = roomContainsPoint(candidate, label.center);
+      if (!labelInside) {
+        continue;
+      }
       const center = roomCenter(candidate);
       const distance = Math.hypot(center.x - label.center.x, center.y - label.center.y);
       const maxDistance = Math.hypot(toNumber(candidate.width), toNumber(candidate.height)) * 0.82;
-      if (!labelInside && distance > maxDistance) {
-        continue;
-      }
       const edgeScore = toNumber(candidate.sourceEvidence?.edgeScore, 0);
       const weakEdges = toNumber(candidate.sourceEvidence?.weakEdges, 0);
       if (weakEdges < 3 || edgeScore < 0.42) {
@@ -1629,6 +1674,10 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
         ...(best.candidate.sourceEvidence || {}),
         ocrText: label.text,
         ocrSource: label.source,
+        ocrCandidateId: label.candidateId,
+        ocrBox: label.box,
+        ocrCenter: label.center,
+        ocrConfidence: label.confidence,
         ocrDistance: Number(best.distance.toFixed(1)),
         ocrInsideRoom: best.labelInside,
         recoveredBecause: existing ? 'ocr-label-replaced-distant-room-boundary' : 'ocr-label-near-wall-grid-candidate'
@@ -2422,6 +2471,13 @@ function inferDoorsFromSymbolCandidates(preprocessing = {}) {
           rightSupport: candidate.rightSupport,
           doorType: candidate.doorType || '',
           hasSwingArc: Boolean(candidate.hasSwingArc),
+          swingEvidence: candidate.leafLine ? {
+            orientation: candidate.leafLine.orientation || '',
+            length: candidate.leafLine.length,
+            hinge: candidate.leafLine.hinge || null,
+            arcEdgeDensity: candidate.leafLine.arcEdgeDensity
+          } : null,
+          openingGapEvidence: candidate.openingGapEvidence || null,
           assetMatch,
           confirmedOpening: assetMatched || hasWall || toNumber(candidate.confidence, 0) >= 0.7,
           inferredFrom: 'wall-gap-between-supported-wall-runs'
@@ -4332,6 +4388,67 @@ function summarizeSourceAsset(localSourceFile) {
   };
 }
 
+function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
+  const list = Array.isArray(rooms) ? rooms : [];
+  const ocrCandidates = Array.isArray(preprocessing?.ocrCandidates) ? preprocessing.ocrCandidates : [];
+  const ocrGrounded = list.filter((room) => Boolean(
+    room?.sourceEvidence?.ocrCandidateId || room?.sourceEvidence?.ocrText
+  )).length;
+  const templateOnly = list.filter((room) => Boolean(
+    room?.sourceEvidence?.semanticTemplateOnly
+    || room?.sourceEvidence?.boundaryNeedsReview
+    || String(room?.source || '').includes('layout-template')
+  )).length;
+  const layoutCountInferred = list.filter((room) => Boolean(
+    room?.sourceEvidence?.layoutCountAssigned
+    || String(room?.source || '').includes('layout-count-semantics')
+  )).length;
+  const hasExplicitSemanticEvidence = (room) => Boolean(
+    room?.sourceEvidence?.ocrCandidateId || room?.sourceEvidence?.ocrText
+  );
+  const ungroundedNamedRooms = list.filter((room) => Boolean(room?.name)
+    && !hasExplicitSemanticEvidence(room)
+    && !room?.sourceEvidence?.semanticTemplateOnly
+    && !room?.sourceEvidence?.layoutCountAssigned
+    && !String(room?.source || '').includes('layout-count-semantics')
+    && !String(room?.source || '').includes('layout-template'));
+  const ocrGroundedRoomNames = list
+    .filter(hasExplicitSemanticEvidence)
+    .map((room) => room.name || room.id)
+    .filter(Boolean);
+  const partialOcrLabelRooms = list.filter((room) => room?.sourceEvidence?.ocrLabelNeedsReview);
+  const groundedTexts = new Set(list.map((room) => room?.sourceEvidence?.ocrText).filter(Boolean));
+  const unassignedOcrRoomLabels = ocrCandidates
+    .map(normalizeOcrCandidate)
+    .filter((label) => label && label.type !== 'space' && !groundedTexts.has(label.text))
+    .map((label) => ({
+      text: label.text,
+      center: label.center,
+      confidence: label.confidence,
+      source: label.source,
+      candidateId: label.candidateId
+    }));
+  return {
+    roomCount: list.length,
+    ocrCandidateCount: ocrCandidates.length,
+    ocrGroundedRoomCount: ocrGrounded,
+    ocrGroundedRoomNames,
+    partialOcrLabelCount: partialOcrLabelRooms.length,
+    partialOcrLabelRoomNames: partialOcrLabelRooms.map((room) => room.name || room.id).filter(Boolean),
+    unassignedOcrRoomLabelCount: unassignedOcrRoomLabels.length,
+    unassignedOcrRoomLabels,
+    templateOnlyRoomCount: templateOnly,
+    layoutCountInferredRoomCount: layoutCountInferred,
+    namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamedRooms.length,
+    namedRoomsWithoutExplicitSemanticEvidence: ungroundedNamedRooms.map((room) => room.name || room.id).filter(Boolean),
+    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0,
+    roomGeometryFullyImageGrounded: list.length > 0 && templateOnly === 0 && layoutCountInferred === 0,
+    note: ocrCandidates.length === 0
+      ? 'No OCR text candidates were produced; room names may be inferred from layout heuristics and must not be treated as image-confirmed.'
+      : 'OCR-derived labels are tracked separately from template/layout-count inference.'
+  };
+}
+
 function buildRecognitionDraft(job, preprocessing = null) {
   const parseResult = job?.floor_plan?.parse_result || {};
   const hasParseResult = hasUsableParseRooms(parseResult);
@@ -4416,6 +4533,10 @@ function buildRecognitionDraft(job, preprocessing = null) {
       : rooms.some((room) => room.source === 'layout-template-supplemental' || room.source === 'opencv-wall-grid-with-review-semantics') ? 0.68
       : sourceType === 'hand_drawn' ? 0.58 : 0.7;
   const issues = collectIssues({ sourceType, rooms, hasParseResult, preprocessing });
+  const semanticEvidenceAudit = summarizeRoomSemanticEvidence(rooms, preprocessing);
+  if (semanticEvidenceAudit.ocrCandidateCount === 0 && semanticEvidenceAudit.roomCount > 0) {
+    issues.push('语义证据审计：本次未产生 OCR 文本候选，房间名称可能来自布局启发式推断，不能视为图像文字已确认。');
+  }
   const floorplanModel = buildFloorplanModel({
     preprocessing,
     rooms,
@@ -4485,6 +4606,7 @@ function buildRecognitionDraft(job, preprocessing = null) {
       recognitionAssetMatchCount: preprocessing?.recognitionAssets?.matchedCandidateCount || 0,
       excludedAnnotationLineCount: preprocessing?.recognitionAssets?.excludedAnnotationLineCount || 0,
       geometryRoomCandidateCount: geometryRooms.length,
+      semanticEvidenceAudit: summarizeRoomSemanticEvidence(rooms, preprocessing),
       candidateContourCount: preprocessing?.geometryCandidates?.contours?.length || 0,
       needsReview: !(hasParseResult && hasParseWalls) || geometryConfidence < 0.75 || rooms.length <= 1,
       semanticFallback: rooms.some((room) => room.source === 'layout-template-from-plan-labels')
@@ -4515,14 +4637,85 @@ function buildRecognitionDraft(job, preprocessing = null) {
 
 function finalizeRecognitionDraft(draft = {}, preprocessing = {}) {
   const merged = mergePreprocessing(draft, preprocessing);
-  return reviewSemanticDoorPriors(
-    repairRecognitionTopology(
-      preferVisualDoorCandidates(
-        preferVisualWindowCandidates(merged, preprocessing),
-        preprocessing
-      )
-    )
+  const candidateDraft = preferVisualDoorCandidates(
+    preferVisualWindowCandidates(merged, preprocessing),
+    preprocessing
   );
+  // Capture diagnostics before topology normalization/merging. Repair can join
+  // wall runs and make a source gap disappear from the final geometry; retain
+  // that original evidence for audit without automatically treating every
+  // repaired source issue as an unresolved final blocker.
+  const sourceSpatialValidation = validateFloorplanDraft(candidateDraft);
+  const repaired = reviewSemanticDoorPriors(repairRecognitionTopology(candidateDraft));
+  const spatialValidation = validateFloorplanDraft(repaired);
+  const previousQuality = repaired.quality || {};
+  // Spatial review findings must gate automatic 3D extrusion, not merely set a
+  // side-channel quality flag. Keep scores/metrics intact for diagnosis.
+  const spatialReviewRequired = spatialValidation.reviewRequired || !spatialValidation.valid;
+  const gatedCommercialReadiness = spatialReviewRequired && previousQuality.commercialReadiness
+    ? {
+      ...previousQuality.commercialReadiness,
+      status: previousQuality.commercialReadiness.status === 'blocked' ? 'blocked' : 'needs_human_review',
+      autoPass: false,
+      blockingReasons: [...new Set([...(previousQuality.commercialReadiness.blockingReasons || []), 'spatial-validation-review'])],
+      reviewChecklist: [...new Set([...(previousQuality.commercialReadiness.reviewChecklist || []), '空间拓扑存在未解决的几何诊断；人工确认前不得自动放行。'])]
+    }
+    : repaired.commercialReadiness;
+  const gatedThreeDReadiness = spatialReviewRequired && previousQuality.threeDReadiness
+    ? {
+      ...previousQuality.threeDReadiness,
+      status: previousQuality.threeDReadiness.status === 'blocked' ? 'blocked' : 'review_required',
+      canAutoExtrude: false,
+      commercialStatus: gatedCommercialReadiness?.status || previousQuality.threeDReadiness.commercialStatus,
+      blockers: [...new Set([...(previousQuality.threeDReadiness.blockers || []), 'spatial-validation-review'])],
+      reviewChecklist: [...new Set([...(previousQuality.threeDReadiness.reviewChecklist || []), '墙网连续性或空间几何存在未解决问题；人工确认前禁止自动拉伸建模。'])]
+    }
+    : repaired.threeDReadiness;
+  // Keep legacy string issues and preserve structured diagnostics instead of silently dropping them.
+  const issues = (repaired.issues || []).map((issue) => {
+    if (typeof issue === 'string') return issue;
+    if (!issue || typeof issue !== 'object') return String(issue);
+    const severity = issue.severity ? `[${issue.severity}]` : '';
+    const code = issue.code || issue.message || 'recognition-issue';
+    const entity = issue.entityId ? ` (${issue.entityId})` : '';
+    const related = issue.relatedEntityId ? ` -> ${issue.relatedEntityId}` : '';
+    return `识别问题${severity}: ${code}${entity}${related}`;
+  });
+  for (const issue of sourceSpatialValidation.issues) {
+    issues.push(`修复前空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
+  }
+  for (const issue of spatialValidation.issues) {
+    issues.push(`空间校验[${issue.severity}]: ${issue.code} (${issue.entityId || 'unknown'})`);
+  }
+  return {
+    ...repaired,
+    issues,
+    spatialGraph: spatialValidation.graph,
+    quality: {
+      ...previousQuality,
+      // Structural contradictions must affect downstream readiness, not merely
+      // appear as informational log messages.
+      needsReview: Boolean(previousQuality.needsReview)
+        || spatialValidation.reviewRequired
+        || !spatialValidation.valid,
+      ...(gatedCommercialReadiness ? { commercialReadiness: gatedCommercialReadiness } : {}),
+      ...(gatedThreeDReadiness ? { threeDReadiness: gatedThreeDReadiness } : {}),
+      spatialValidation: {
+        // Source-stage findings are evidence for traceability, not blockers by
+        // themselves; the post-repair validation below determines unresolved
+        // geometry and automatic-3D gating.
+        sourceIssueCount: sourceSpatialValidation.issues.length,
+        sourceIssues: sourceSpatialValidation.issues,
+        valid: spatialValidation.valid,
+        reviewRequired: spatialValidation.reviewRequired,
+        issueCount: spatialValidation.issues.length,
+        errorCount: spatialValidation.issues.filter(issue => issue.severity === 'error').length,
+        reviewCount: spatialValidation.issues.filter(issue => issue.severity === 'review').length,
+        metrics: spatialValidation.metrics,
+        issues: spatialValidation.issues
+      }
+    }
+  };
 }
 
 function mergePreprocessing(draft, preprocessing) {
@@ -4646,5 +4839,6 @@ async function prepareRecognitionDraft(job, outputDir, options = {}) {
 module.exports = {
   prepareRecognitionDraft,
   buildRecognitionDraft,
-  finalizeRecognitionDraft
+  finalizeRecognitionDraft,
+  assignOcrSemantics
 };

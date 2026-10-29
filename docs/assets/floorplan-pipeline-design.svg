@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="980" viewBox="0 0 1440 980" role="img" aria-labelledby="title desc">
+<title id="title">AIInhouse 户型图识别到 3D 全景验收设计图</title>
+<desc id="desc">从原始户型图开始，提取几何与像素外观证据，融合房间门窗语义，验证空间拓扑，再构建三维模型并生成全景，失败则人工修正并回流测试。</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#53657d"/></marker>
+  <style>
+    .bg{fill:#f5f7fb}.title{font:700 30px sans-serif;fill:#17263c}.sub{font:16px sans-serif;fill:#516176}
+    .box{fill:#fff;stroke:#91a4bd;stroke-width:2;rx:14}.blue{fill:#e8f1ff;stroke:#3d73b9}.purple{fill:#f0eaff;stroke:#8060bd}.green{fill:#e4f7ed;stroke:#318a62}.amber{fill:#fff3d9;stroke:#c58b26}.red{fill:#ffebeb;stroke:#c44f54}
+    .h{font:700 19px sans-serif;fill:#1c3048}.p{font:15px sans-serif;fill:#40536a}.small{font:13px sans-serif;fill:#516176}
+    .arrow{stroke:#53657d;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.dashed{stroke-dasharray:7 6}
+  </style>
+</defs>
+<rect class="bg" width="1440" height="980"/>
+<text x="64" y="62" class="title">AIInhouse｜户型图 → 结构化 2D → 3D → 360° 全景</text>
+<text x="64" y="94" class="sub">设计原则：证据先行、拓扑优先、失败可定位；未通过验收不输出“已完成”的商业化结果</text>
+
+<rect x="60" y="135" width="300" height="130" class="box blue"/>
+<text x="84" y="170" class="h">1. 输入与预处理</text>
+<text x="84" y="200" class="p">原图 / PDF、尺寸与坐标映射</text>
+<text x="84" y="226" class="p">方向校正、清晰度与图像质量</text>
+<text x="84" y="248" class="small">输出：原图、预处理报告</text>
+
+<rect x="410" y="135" width="300" height="130" class="box blue"/>
+<text x="434" y="170" class="h">2. 几何与外观证据</text>
+<text x="434" y="200" class="p">Hough 线、形态学墙带、轮廓</text>
+<text x="434" y="226" class="p">亮度、暗像素比、对比度、BGR</text>
+<text x="434" y="248" class="small">输出：带来源 ID 的候选，不直接定性</text>
+
+<rect x="760" y="135" width="300" height="130" class="box purple"/>
+<text x="784" y="170" class="h">3. 语义与图元融合</text>
+<text x="784" y="200" class="p">OCR 房间标签、门窗符号、家具</text>
+<text x="784" y="226" class="p">图元库匹配 + 视觉证据 + 置信度</text>
+<text x="784" y="248" class="small">输出：房间、墙、门窗候选</text>
+
+<rect x="1110" y="135" width="270" height="130" class="box purple"/>
+<text x="1134" y="170" class="h">4. 拓扑与空间验证</text>
+<text x="1134" y="200" class="p">墙网连通、房间边界</text>
+<text x="1134" y="226" class="p">开口附着、重叠、异常间隙</text>
+<text x="1134" y="248" class="small">输出：问题代码与图像坐标</text>
+
+<path d="M360 200 H405" class="arrow"/><path d="M710 200 H755" class="arrow"/><path d="M1060 200 H1105" class="arrow"/>
+
+<path d="M1245 265 V325 H910 V360" class="arrow"/>
+<rect x="760" y="360" width="300" height="120" class="box amber"/>
+<text x="784" y="395" class="h">5. 质量闸门 / 人工复核</text>
+<text x="784" y="425" class="p">未确认开口不能解释墙网断点</text>
+<text x="784" y="451" class="p">低置信房间、墙段进入可编辑复核</text>
+<path d="M910 480 V535" class="arrow"/>
+
+<rect x="760" y="535" width="300" height="110" class="box green"/>
+<text x="784" y="570" class="h">6. 确定性 3D 建模</text>
+<text x="784" y="600" class="p">共享墙、门窗洞口、墙地顶几何</text>
+<text x="784" y="625" class="small">先锁定结构，再布置家具与材质</text>
+<path d="M910 645 V700" class="arrow"/>
+
+<rect x="760" y="700" width="300" height="110" class="box green"/>
+<text x="784" y="735" class="h">7. 全景渲染与验收</text>
+<text x="784" y="765" class="p">真实渲染、2:1 等距柱状投影</text>
+<text x="784" y="790" class="small">检查图像存在、尺寸正确、查看器可加载</text>
+
+<rect x="60" y="360" width="560" height="200" class="box red"/>
+<text x="86" y="398" class="h">未通过时：不猜测、不掩盖</text>
+<text x="86" y="432" class="p">• 保留 issueCode、实体 ID、原图坐标和来源证据</text>
+<text x="86" y="462" class="p">• 人工修正墙段、房间标签或门窗关联</text>
+<text x="86" y="492" class="p">• 把修正保存成回归样本，防止下次再次犯错</text>
+<text x="86" y="532" class="small">失败反馈到证据融合与拓扑阶段，而不是只重试整张图</text>
+<path d="M760 420 H700 V460 H625" class="arrow dashed"/>
+<path d="M60 460 H34 V200 H55" class="arrow dashed"/>
+
+<rect x="1110" y="360" width="270" height="210" class="box"/>
+<text x="1134" y="397" class="h">最终验收产物</text>
+<text x="1134" y="432" class="p">✓ 识别与证据报告</text>
+<text x="1134" y="462" class="p">✓ 可追踪的 2D 结构</text>
+<text x="1134" y="492" class="p">✓ 可校验的 3D 场景/网格</text>
+<text x="1134" y="522" class="p">✓ 真正可加载的 360° 全景</text>
+<path d="M1060 755 H1090 V465 H1105" class="arrow"/>
+
+<rect x="60" y="860" width="1320" height="70" fill="#17263c" rx="12"/>
+<text x="88" y="890" style="font:700 18px sans-serif;fill:#fff">当前样本状态</text>
+<text x="88" y="914" style="font:15px sans-serif;fill:#e6edf7">识别运行成功，但仍需复核 2 处墙网间隙；3D 网格与全景的端到端验收尚未证明通过。</text>
+</svg>

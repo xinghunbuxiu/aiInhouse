@@ -1,0 +1,111 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const { buildSpatialGraph, validateFloorplanDraft } = require('./spatial-reasoning');
+
+const room = { id: 'room-a', name: 'Living', type: 'living', x: 0, y: 0, width: 100, height: 100 };
+const nearDoor = { id: 'door-near-wall', center: { x: 108, y: 50 }, width: 30, height: 4 };
+const farDoor = { id: 'door-far-away', center: { x: 150, y: 50 }, width: 30, height: 4 };
+
+const nearReport = validateFloorplanDraft({ rooms: [room], doors: [nearDoor] });
+assert.equal(nearReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), false,
+  'opening near a room boundary should be associated within the bounded tolerance');
+assert.deepEqual(buildSpatialGraph({ rooms: [room], doors: [nearDoor] }).doorConnections[0].connectedRoomIds, ['room-a'],
+  'spatial graph and validation should use the same opening association rule');
+
+const wallNearFarDoor = {
+  id: 'wall-near-far-door',
+  start: { x: 100, y: 0 },
+  end: { x: 100, y: 100 }
+};
+const detachedWithWallReport = validateFloorplanDraft({
+  rooms: [room],
+  walls: [wallNearFarDoor],
+  doors: [farDoor]
+});
+const detachedIssue = detachedWithWallReport.issues.find(issue => issue.code === 'door-not-associated-with-room');
+assert.deepEqual(detachedIssue?.nearestWallEvidence, {
+  wallId: 'wall-near-far-door',
+  distance: 50,
+  projection: 0.5,
+  withinSegmentSpan: true,
+  nearestEndpoint: null,
+  endpointDistance: 50
+}, 'room-association diagnostics should expose nearest-wall evidence without relaxing the room association gate');
+assert.deepEqual(detachedIssue?.nearestRoomEvidence, {
+  roomId: 'room-a',
+  distanceToBounds: 50,
+  withinBounds: false,
+  withinAssociationTolerance: false,
+  tolerance: 10.5,
+  openingPoint: { x: 150, y: 50 }
+}, 'room-association diagnostics should quantify distance to the nearest valid room without relaxing the association gate');
+
+const farReport = validateFloorplanDraft({ rooms: [room], doors: [farDoor] });
+assert.equal(farReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), true,
+  'opening far from all rooms must remain flagged');
+
+const rectangleDoor = { id: 'door-rectangle', x: -10, y: 40, width: 20, height: 10 };
+const rectangleReport = validateFloorplanDraft({ rooms: [room], doors: [rectangleDoor] });
+assert.equal(rectangleReport.issues.some(issue => issue.code === 'door-not-associated-with-room'), false,
+  'scanner rectangle x/y must be interpreted as top-left and associated by its center');
+assert.deepEqual(buildSpatialGraph({ rooms: [room], doors: [rectangleDoor] }).doorConnections[0].connectedRoomIds, ['room-a'],
+  'spatial graph must use rectangle center instead of top-left coordinates');
+
+const attachedWall = { id: 'wall-a', start: { x: 0, y: 0 }, end: { x: 100, y: 0 } };
+const conflictingWindow = {
+  id: 'window-conflict',
+  center: { x: 50, y: 10 },
+  width: 20,
+  height: 5,
+  attachedWallId: 'wall-a',
+  sourceEvidence: { attachedWallId: 'wall-a', withinWallSpan: false, withinAttachmentSpan: true, wallDistance: 61, wallAxisDelta: -61 }
+};
+const attachmentReport = validateFloorplanDraft({ rooms: [room], walls: [attachedWall], windows: [conflictingWindow] });
+assert.equal(attachmentReport.issues.some(issue => issue.code === 'opening-wall-attachment-evidence-conflict'), true,
+  'an existing wall ID must not override explicit evidence that the opening falls outside the wall span');
+assert.equal(attachmentReport.metrics.wallAttachedOpeningCount, 0,
+  'contradictory attachment evidence must not count as a verified wall attachment');
+const attachmentConflict = attachmentReport.issues.find(issue => issue.code === 'opening-wall-attachment-evidence-conflict');
+assert.deepEqual(attachmentConflict?.nearestWallEvidence, {
+  wallId: 'wall-a',
+  distance: 10,
+  projection: 0.5,
+  withinSegmentSpan: true,
+  nearestEndpoint: null,
+  endpointDistance: 50
+}, 'attachment conflicts should include independently computed nearest-wall geometry evidence');
+assert.equal(attachmentConflict?.nearestRoomEvidence?.roomId, 'room-a',
+  'attachment conflicts should include nearest-room evidence for triage');
+
+// A proposed/unconfirmed symbol must not hide a real wall-network gap.
+const gapWalls = [
+  { id: 'gap-wall-left', start: { x: 0, y: 50 }, end: { x: 40, y: 50 } },
+  { id: 'gap-wall-right', start: { x: 60, y: 50 }, end: { x: 100, y: 50 } }
+];
+const proposedOpeningGapReport = validateFloorplanDraft({
+  walls: gapWalls,
+  doors: [{ id: 'proposed-gap-door', center: { x: 50, y: 50 }, width: 20, height: 10,
+    sourceEvidence: { needsVisualConfirmation: true } }]
+});
+assert.equal(proposedOpeningGapReport.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), true,
+  'an unconfirmed opening candidate must not suppress an unexplained wall-network gap');
+const confirmedOpeningGapReport = validateFloorplanDraft({
+  walls: gapWalls,
+  doors: [{ id: 'confirmed-gap-door', center: { x: 50, y: 50 }, width: 20, height: 10,
+    sourceEvidence: { confirmedOpening: true, needsVisualConfirmation: false } }]
+});
+assert.equal(confirmedOpeningGapReport.issues.some(issue => issue.code === 'wall-network-gap-unexplained'), false,
+  'a visually confirmed opening aligned with the gap may explain that wall-network break');
+
+const overlapReport = validateFloorplanDraft({
+  rooms: [
+    room,
+    { id: 'room-b', name: 'Bedroom', type: 'bedroom', x: 90, y: 90, width: 40, height: 30 }
+  ]
+});
+const overlap = overlapReport.issues.find(issue => issue.code === 'room-bounds-overlap');
+assert.deepEqual(overlap?.overlap, { width: 10, height: 10, area: 100 },
+  'overlap diagnostics should quantify intersection geometry');
+
+console.log('spatial-reasoning tests passed');

@@ -44,6 +44,30 @@ function makeWallGridPreprocess() {
     geometryCandidates: {
       lines,
       contours: [],
+      doorSymbolCandidates: [{
+        id: 'door-swing-evidence-1',
+        type: 'door',
+        doorType: 'single_swing',
+        orientation: 'horizontal',
+        confidence: 0.76,
+        x: 100,
+        y: 95,
+        width: 32,
+        height: 10,
+        center: { x: 116, y: 100 },
+        source: 'wall-gap-door-scanner',
+        wallCandidateId: 'wall-grid-h2',
+        gapLength: 32,
+        leftSupport: 0.72,
+        rightSupport: 0.68,
+        hasSwingArc: true,
+        leafLine: {
+          orientation: 'horizontal',
+          length: 32,
+          hinge: { x: 100, y: 100 },
+          arcEdgeDensity: 0.024
+        }
+      }],
       wallBandCount: lines.length
     }
   };
@@ -67,6 +91,11 @@ assert(draft.strategy?.localGeometry === 'opencv_wall_grid_rooms', 'Expected wal
 assert(draft.geometryRooms?.length === 4, `Expected 4 geometry rooms, got ${draft.geometryRooms?.length || 0}.`);
 assert(draft.rooms?.length === 4, `Expected 4 output rooms, got ${draft.rooms?.length || 0}.`);
 assert(draft.quality?.semanticFallback === 'template_semantics_on_opencv_wall_grid', 'Expected template semantics on geometry rooms.');
+const swingDoor = (draft.doors || []).find((door) => door.sourceEvidence?.scannerId === 'door-swing-evidence-1');
+assert(swingDoor, 'Expected the door scanner candidate to reach the recognition draft.');
+assert(swingDoor.sourceEvidence.swingEvidence?.arcEdgeDensity === 0.024, 'Expected door swing-arc density to survive draft generation.');
+assert(swingDoor.sourceEvidence.swingEvidence?.hinge?.x === 100, 'Expected door hinge coordinates to survive draft generation.');
+assert(swingDoor.sourceEvidence.wallCandidateId === 'wall-grid-h2', 'Expected wall association evidence to survive draft generation.');
 
 console.log(JSON.stringify({
   ok: true,

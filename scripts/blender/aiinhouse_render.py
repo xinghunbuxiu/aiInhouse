@@ -378,7 +378,48 @@ def add_wall_segment(name, side, center, length, thickness, height, z, material)
     return add_cube(name, (x, y, z), (thickness, length, height), material)
 
 
-def add_room_wall(side, room_index, room_center, room_size, openings, bounds, wall_mat):
+def shared_room_wall_sides(rooms, room_index, tolerance=2.0):
+    """Return fully shared sides already owned by an earlier room.
+
+    Only suppress a duplicate when the neighboring room covers the complete
+    side. Partial overlaps are deliberately left untouched because removing
+    them without splitting the wall could create a gap in the floorplan.
+    """
+    if room_index <= 0 or room_index >= len(rooms):
+        return set()
+
+    current = room_bounds(rooms[room_index])
+    left = current["x"]
+    right = current["x"] + current["width"]
+    bottom = current["y"]
+    top = current["y"] + current["height"]
+    shared = set()
+
+    for previous in rooms[:room_index]:
+        other = room_bounds(previous)
+        other_left = other["x"]
+        other_right = other["x"] + other["width"]
+        other_bottom = other["y"]
+        other_top = other["y"] + other["height"]
+
+        vertical_overlap = min(top, other_top) - max(bottom, other_bottom)
+        horizontal_overlap = min(right, other_right) - max(left, other_left)
+
+        if abs(left - other_right) <= tolerance and vertical_overlap >= current["height"] - tolerance:
+            shared.add("west")
+        if abs(right - other_left) <= tolerance and vertical_overlap >= current["height"] - tolerance:
+            shared.add("east")
+        if abs(bottom - other_top) <= tolerance and horizontal_overlap >= current["width"] - tolerance:
+            shared.add("south")
+        if abs(top - other_bottom) <= tolerance and horizontal_overlap >= current["width"] - tolerance:
+            shared.add("north")
+
+    return shared
+
+
+def add_room_wall(side, room_index, room_center, room_size, openings, bounds, wall_mat, skip_sides=None):
+    if side in (skip_sides or set()):
+        return
     scale = 0.025
     wall_height = 2.7
     wall_thickness = 0.08
@@ -654,8 +695,11 @@ def build_scene(plan, mode="effect"):
         )
         add_cube(f"floor-{room.get('id', index)}", (x, y, 0), (w, h, 0.045), floor_mat)
         openings = room_openings(plan, box)
+        # Each fully shared wall is emitted once by the first room that owns
+        # the edge. This avoids coplanar duplicate interior walls in 3D renders.
+        shared_sides = shared_room_wall_sides(rooms, index)
         for side in ["north", "south", "east", "west"]:
-            add_room_wall(side, index, (x, y), (w, h), openings, bounds, wall_mat)
+            add_room_wall(side, index, (x, y), (w, h), openings, bounds, wall_mat, shared_sides)
         add_room_furniture(room, box, bounds, mats, index, mode != "panorama")
         add_room_light(room, box, bounds, index)
 

@@ -2,20 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { buildRecognitionDraft } = require('../codex-worker/src/recognizers/local-draft.js');
 const { repairRecognitionTopology } = require('../codex-worker/src/recognizers/topology.js');
+const { validateFloorplanDraft } = require('../codex-worker/src/recognizers/spatial-reasoning.js');
+const { loadRecognitionAssetCatalog } = require('../codex-worker/src/assets/recognition-assets.js');
 
 function getArg(flag, fallback = '') {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1] || fallback;
 }
 
-function parseLayout(filePath) {
-  const match = path.basename(filePath).match(/(\d+)室(\d+)厅(\d+)厨(\d+)卫/);
+export function parseLayout(filePath, layoutOverride = '') {
+  const match = String(layoutOverride || path.basename(filePath)).match(/(\d+)室(\d+)厅(\d+)厨(\d+)卫/);
   if (!match) {
     return { layout: '', bedrooms: 0, halls: 0, kitchens: 0, baths: 0 };
   }
@@ -28,7 +30,17 @@ function parseLayout(filePath) {
   };
 }
 
-function collectCandidates() {
+export function collectCandidates({ imagePath = '', repoRoot = root } = {}) {
+  if (imagePath) {
+    const resolvedImage = path.resolve(imagePath);
+    if (!fs.existsSync(resolvedImage) || !fs.statSync(resolvedImage).isFile()) {
+      throw new Error(`Input floor-plan image does not exist or is not a file: ${resolvedImage}`);
+    }
+    if (!/\.(jpe?g|png|webp)$/i.test(resolvedImage)) {
+      throw new Error(`Unsupported floor-plan image format: ${resolvedImage}. Use JPG, PNG, or WEBP.`);
+    }
+    return [resolvedImage];
+  }
   const patterns = [
     '2室2厅1厨1卫',
     '2室2厅1厨2卫',
@@ -42,8 +54,8 @@ function collectCandidates() {
     '2室1厅1厨1卫'
   ];
   const roots = [
-    path.join(root, 'backend/uploads/floorplans/kujiale-xinfu'),
-    path.join(root, 'backend/uploads/floorplans/kujiale')
+    path.join(repoRoot, 'backend/uploads/floorplans/kujiale-xinfu'),
+    path.join(repoRoot, 'backend/uploads/floorplans/kujiale')
   ];
   const all = [];
   for (const base of roots) {
@@ -72,8 +84,8 @@ function collectCandidates() {
   }
 
   const locals = [
-    path.join(root, 'backend/uploads/file-1781863511304-851193311.jpg'),
-    path.join(root, 'backend/uploads/file-1781963251222-579906215.jpg')
+    path.join(repoRoot, 'backend/uploads/file-1781863511304-851193311.jpg'),
+    path.join(repoRoot, 'backend/uploads/file-1781963251222-579906215.jpg')
   ].filter((file) => fs.existsSync(file));
 
   return [...locals, ...picked];
@@ -83,7 +95,7 @@ function slugify(filePath) {
   return path.basename(filePath, path.extname(filePath)).replace(/[^\w\u4e00-\u9fa5.-]+/g, '_').slice(0, 80);
 }
 
-function writeJob(filePath, outputDir) {
+function writeJob(filePath, outputDir, layoutOverride = '') {
   const job = {
     job: {
       job_no: `BATCH-${slugify(filePath)}`,
@@ -95,7 +107,7 @@ function writeJob(filePath, outputDir) {
       image_url: filePath
     },
     house: {
-      layout: parseLayout(filePath).layout
+      layout: parseLayout(filePath, layoutOverride).layout
     },
     assets: {
       local_source_file: filePath
@@ -117,43 +129,305 @@ function runPreprocess(jobFile, outputDir) {
   }
 }
 
-function evaluateImage(filePath, outputDir) {
+const ASSET_COVERAGE_GROUPS = [
+  ['door', 'doorSymbolCandidates'],
+  ['window', 'windowSymbolCandidates'],
+  ['furniture', 'furnitureSymbolCandidates'],
+  ['annotation', 'annotationSymbolCandidates'],
+  ['balcony', 'balconyCandidates'],
+  ['plumbing-hvac', 'mepSymbolCandidates'],
+  ['electrical', 'electricalSymbolCandidates']
+];
+
+export function buildAssetCoverageAudit(preprocessing = {}, catalog = {}) {
+  const geometry = preprocessing.geometryCandidates || {};
+  const groups = ASSET_COVERAGE_GROUPS.map(([kind, key]) => {
+    const candidates = Array.isArray(geometry[key]) ? geometry[key] : [];
+    const matched = candidates.filter((candidate) => Boolean(candidate.assetMatch?.assetId)).length;
+    const unmatched = candidates.filter((candidate) => !candidate.assetMatch?.assetId);
+    return {
+      kind,
+      sourceKey: key,
+      candidateCount: candidates.length,
+      matchedCandidateCount: matched,
+      unmatchedCandidateCount: unmatched.length,
+      unmatchedCandidates: unmatched.map((candidate, index) => ({
+        id: candidate.id || candidate.candidateId || `${kind}-unmatched-${index + 1}`,
+        kind,
+        type: candidate.type || candidate.kind || candidate.label || null,
+        source: candidate.source || 'unknown',
+        orientation: candidate.orientation || null,
+        confidence: candidate.confidence ?? null,
+        bounds: candidate.bounds || candidate.rect || (
+          Number.isFinite(candidate.x) && Number.isFinite(candidate.y)
+            ? { x: candidate.x, y: candidate.y, width: candidate.width ?? null, height: candidate.height ?? null }
+            : null
+        ),
+        geometryEvidence: {
+          start: candidate.start || null,
+          end: candidate.end || null,
+          polygon: Array.isArray(candidate.polygon) ? candidate.polygon : null,
+          width: candidate.width ?? null,
+          height: candidate.height ?? null,
+          thickness: candidate.thickness ?? null,
+          area: candidate.area ?? null,
+          lineStyle: candidate.lineStyle || null,
+          tone: candidate.tone || candidate.wallEvidence?.tone || null,
+          wallRejectReasons: candidate.wallRejectReasons || candidate.wallEvidence?.reasons || candidate.rejectReasons || []
+        },
+        reviewHint: '先检查原图对应局部与识别特征；确认是有效图元且现有图例不匹配后，再新增图元或变体'
+      }))
+    };
+  });
+  const unmatchedCandidates = groups.flatMap((group) => group.unmatchedCandidates);
+  const ocrCandidates = Array.isArray(preprocessing.ocrCandidates) ? preprocessing.ocrCandidates : [];
+  const textReviewLeads = ocrCandidates
+    .filter((candidate) => {
+      const text = String(candidate.text || candidate.value || candidate.label || '').trim();
+      return text.length > 0 && !candidate.assetMatch?.assetId;
+    })
+    .slice(0, 100)
+    .map((candidate, index) => ({
+      id: candidate.id || candidate.candidateId || `ocr-text-${index + 1}`,
+      text: String(candidate.text || candidate.value || candidate.label || '').trim().slice(0, 120),
+      bounds: candidate.bounds || candidate.rect || null,
+      reviewHint: '这是未归类文字线索，不等同于缺失图元；先判断是房间名、尺寸、设备编号还是图纸注释'
+    }));
+  // Geometry primitives (wall-grid lines and structural wall vectors) are
+  // not symbols. Keep them visible as diagnostics, but exclude them from the
+  // symbol-asset match rate to avoid reporting a valid support line as a
+  // missing catalog glyph.
+  const geometryDiagnostics = {
+    wallLineCandidateCount: Array.isArray(geometry.lines) ? geometry.lines.length : 0,
+    structuralWallVectorCount: Array.isArray(geometry.structuralWallVectors) ? geometry.structuralWallVectors.length : 0,
+    wallGridSupportLineCount: Array.isArray(geometry.lines)
+      ? geometry.lines.filter((candidate) => /wall-grid-support-line/.test(String(candidate.source || ''))).length
+      : 0
+  };
+  const candidateCount = groups.reduce((sum, group) => sum + group.candidateCount, 0);
+  const matchedCandidateCount = groups.reduce((sum, group) => sum + group.matchedCandidateCount, 0);
+  return {
+    catalogVersion: catalog.version || 'unknown',
+    catalogSymbolCount: (catalog.symbols || []).length,
+    catalogCategoryCount: (catalog.categories || []).length,
+    candidateCount,
+    matchedCandidateCount,
+    unmatchedCandidateCount: unmatchedCandidates.length,
+    // This rate measures asset-ID assignment, not whether the predicted symbol is correct.
+    matchSemantics: 'asset-assignment-not-ground-truth',
+    matchRate: candidateCount > 0 ? Number((matchedCandidateCount / candidateCount).toFixed(4)) : null,
+    geometryDiagnostics,
+    groups,
+    unmatchedCandidates,
+    ocrCandidateCount: ocrCandidates.length,
+    unclassifiedTextLeadCount: textReviewLeads.length,
+    textReviewLeads
+  };
+}
+
+export function countVerifiedAttachedOpenings(openings = [], walls = []) {
+  const wallIds = new Set(walls.map((wall, index) => String(wall.id || `wall-${index + 1}`)));
+  return openings.filter((item) => {
+    const wallId = item.attachedWallId || item.sourceEvidence?.attachedWallId;
+    const evidence = item.sourceEvidence || {};
+    const contradictoryEvidence = evidence.withinWallSpan === false
+      || evidence.withinAttachmentSpan === false;
+    return Boolean(wallId && wallIds.has(String(wallId))
+      && !item.needsWallAttachmentReview
+      && !contradictoryEvidence);
+  }).length;
+}
+
+export function serializeSpatialIssues(issues = []) {
+  return issues.map(({
+    code, severity, message, entityId, relatedEntityId, overlap,
+    entityEvidence, relatedEntityEvidence, nearestRoomEvidence, nearestWallEvidence
+  }) => ({
+    code, severity, message, entityId, relatedEntityId,
+    ...(overlap ? { overlap } : {}),
+    ...(entityEvidence ? { entityEvidence } : {}),
+    ...(relatedEntityEvidence ? { relatedEntityEvidence } : {}),
+    ...(nearestRoomEvidence ? { nearestRoomEvidence } : {}),
+    ...(nearestWallEvidence ? { nearestWallEvidence } : {})
+  }));
+}
+
+function evaluateImage(filePath, outputDir, layoutOverride = '') {
   fs.mkdirSync(outputDir, { recursive: true });
-  const jobFile = writeJob(filePath, outputDir);
+  const jobFile = writeJob(filePath, outputDir, layoutOverride);
   runPreprocess(jobFile, outputDir);
   const preprocessing = JSON.parse(fs.readFileSync(path.join(outputDir, 'recognition-preprocess.json'), 'utf8'));
   const job = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
   const draft = buildRecognitionDraft(job, preprocessing);
   const repaired = repairRecognitionTopology(draft);
   const openings = [...(repaired.doors || []), ...(repaired.windows || [])];
+  const isProposedOpening = (opening) => !(
+    opening.sourceEvidence?.confirmedOpening
+    && !opening.sourceEvidence?.needsVisualConfirmation
+  ) && (
+    opening.sourceEvidence?.needsVisualConfirmation
+    || opening.source === 'semantic-room-opening-prior'
+  );
+  const confirmedDoors = (repaired.doors || []).filter((opening) => !isProposedOpening(opening));
+  const confirmedWindows = (repaired.windows || []).filter((opening) => !isProposedOpening(opening));
+  const confirmedOpenings = [...confirmedDoors, ...confirmedWindows];
+  const proposedOpenings = openings.filter(isProposedOpening);
   const readiness = repaired.quality?.commercialReadiness || {};
-  const attachedOpeningRatio = openings.length
-    ? (openings.length - openings.filter((item) => item.needsWallAttachmentReview).length) / openings.length
-    : 0;
+  const verifiedAttachedOpenings = countVerifiedAttachedOpenings(confirmedOpenings, repaired.walls || []);
+  const verifiedAttachedProposedOpenings = countVerifiedAttachedOpenings(proposedOpenings, repaired.walls || []);
+  const attachedOpeningRatio = confirmedOpenings.length
+    ? verifiedAttachedOpenings / confirmedOpenings.length
+    : null;
+  const proposedAttachedOpeningRatio = proposedOpenings.length
+    ? verifiedAttachedProposedOpenings / proposedOpenings.length
+    : null;
+  // Validate only confirmed openings. Candidate/prior openings are not proof of
+  // real door/window geometry and must not make spatial validation look complete.
+  const spatialValidation = validateFloorplanDraft({
+    rooms: repaired.rooms || [],
+    walls: repaired.walls || [],
+    doors: confirmedDoors,
+    windows: confirmedWindows
+  });
+  const blockingReasons = readiness.blockingReasons || [];
+  const requiresHumanReview = readiness.status === 'needs_human_review'
+    || blockingReasons.some((reason) => /review|复核|人工/i.test(String(reason)))
+    || Boolean(repaired.quality?.needsReview)
+    || Boolean(spatialValidation.reviewRequired)
+    || !spatialValidation.valid;
+
+  // Produce an actionable asset-coverage report from the real image run. A
+  // candidate without an asset match is not automatically a missing symbol:
+  // it is a review lead that can be compared with the source crop and catalog.
+  const assetCatalog = loadRecognitionAssetCatalog();
+  const assetCoverage = buildAssetCoverageAudit(preprocessing, assetCatalog);
 
   return {
     image: filePath,
     name: path.basename(filePath),
-    layout: parseLayout(filePath).layout,
+    layout: parseLayout(filePath, layoutOverride).layout,
     strategy: repaired.strategy?.localGeometry || '',
     geometryConfidence: repaired.confidence?.geometry ?? null,
     semanticsConfidence: repaired.confidence?.semantics ?? null,
     rooms: (repaired.rooms || []).length,
     roomNames: (repaired.rooms || []).map((room) => room.name || room.id),
+    roomDetails: (repaired.rooms || []).map((room) => ({
+      id: room.id || '',
+      name: room.name || '',
+      type: room.type || '',
+      x: room.x ?? null,
+      y: room.y ?? null,
+      width: room.width ?? null,
+      height: room.height ?? null,
+      source: room.source || '',
+      ocrText: room.sourceEvidence?.ocrText || '',
+      ocrCenter: room.sourceEvidence?.ocrCenter || null,
+      ocrInsideRoom: room.sourceEvidence?.ocrInsideRoom ?? null,
+      boundaryNeedsReview: Boolean(room.boundaryNeedsReview || room.sourceEvidence?.boundaryNeedsReview),
+      semanticNeedsReview: Boolean(room.semanticNeedsReview || room.sourceEvidence?.semanticNeedsReview)
+    })),
     walls: (repaired.walls || []).length,
     openings: openings.length,
-    attachedOpeningRatio: Number(attachedOpeningRatio.toFixed(2)),
-    readinessStatus: readiness.status || 'unknown',
+    visualEvidence: {
+      preprocessingQualityScore: preprocessing.quality?.score ?? null,
+      preprocessingIssues: preprocessing.quality?.issues || [],
+      visionAvailable: Boolean(preprocessing.visionAvailable),
+      visionError: preprocessing.visionError || '',
+      visionPythonCommand: preprocessing.visionPythonCommand || '',
+      visionAttempts: preprocessing.visionAttempts || [],
+      ocrStatus: preprocessing.ocrStatus || { available: false, error: 'ocr_status_missing' },
+      ocrCandidateCount: (preprocessing.ocrCandidates || []).length,
+      semanticEvidenceAudit: repaired.quality?.semanticEvidenceAudit || null,
+      imageMetrics: preprocessing.image || null,
+      lineCount: preprocessing.geometryCandidates?.lines?.length ?? 0,
+      contourCount: preprocessing.geometryCandidates?.contours?.length ?? 0,
+      wallBandCount: preprocessing.geometryCandidates?.wallBandCount ?? 0,
+      rejectedWallBandCount: preprocessing.geometryCandidates?.rejectedWallBandCount ?? 0,
+      structuralWallVectorCount: preprocessing.geometryCandidates?.structuralWallVectorCount ?? 0,
+      roomInteriorCandidateCount: preprocessing.geometryCandidates?.roomInteriorCandidateCount ?? 0,
+      balconyCandidateCount: preprocessing.geometryCandidates?.balconyCandidateCount ?? 0,
+      doorSymbolCandidateCount: preprocessing.geometryCandidates?.doorSymbolCandidateCount ?? 0,
+      windowSymbolCandidateCount: preprocessing.geometryCandidates?.windowSymbolCandidateCount ?? 0,
+      doorSymbolCandidates: (preprocessing.geometryCandidates?.doorSymbolCandidates || []).map((candidate) => ({
+        confidence: candidate.confidence ?? null,
+        orientation: candidate.orientation || '',
+        source: candidate.source || '',
+        assetMatched: Boolean(candidate.assetMatch?.assetId),
+        hasWallSupport: Boolean(candidate.wallCandidateId || candidate.leftSupport || candidate.rightSupport)
+      })),
+      windowSymbolCandidates: (preprocessing.geometryCandidates?.windowSymbolCandidates || []).map((candidate) => ({
+        confidence: candidate.confidence ?? null,
+        orientation: candidate.orientation || '',
+        source: candidate.source || '',
+        acceptedAsExteriorWindow: Boolean(candidate.acceptedAsExteriorWindow),
+        proposed: Boolean(candidate.proposedStrongWallWindowCandidate || candidate.proposedRawBalconyWindowCandidate),
+        assetMatched: Boolean(candidate.assetMatch?.assetId)
+      })),
+      acceptedDoorCount: repaired.quality?.acceptedDoorSymbolCandidateCount ?? 0,
+      visualDoorCandidateCount: repaired.quality?.visualDoorCandidateCount ?? 0,
+      acceptedWindowCount: repaired.quality?.acceptedWindowSymbolCandidateCount ?? 0,
+      proposedWindowCount: repaired.quality?.proposedWindowSymbolCandidateCount ?? 0,
+      visualWindowCandidateCount: repaired.quality?.visualWindowCandidateCount ?? 0
+    },
+    openingEvidence: {
+      confirmedCount: confirmedOpenings.length,
+      proposedCount: proposedOpenings.length,
+      suppressedCount: repaired.topology?.suppressedOpeningCount ?? 0,
+      bySource: openings.reduce((counts, opening) => {
+        const source = opening.source || 'unknown';
+        counts[source] = (counts[source] || 0) + 1;
+        return counts;
+      }, {}),
+      proposedIds: proposedOpenings.map((opening) => opening.id || null),
+      confirmedIds: confirmedOpenings.map((opening) => opening.id || null),
+      confirmedAttachedCount: verifiedAttachedOpenings,
+      proposedAttachedCount: verifiedAttachedProposedOpenings,
+      proposedAttachedRatio: proposedAttachedOpeningRatio == null ? null : Number(proposedAttachedOpeningRatio.toFixed(2)),
+      suppressed: repaired.topology?.suppressedOpenings || []
+    },
+    attachedOpeningRatio: attachedOpeningRatio == null ? null : Number(attachedOpeningRatio.toFixed(2)),
+    readinessStatus: !spatialValidation.valid || spatialValidation.reviewRequired || requiresHumanReview
+      ? 'needs_human_review'
+      : (readiness.status || 'unknown'),
+    assetCoverage,
     readinessScore: readiness.score ?? null,
-    blockingReasons: readiness.blockingReasons || [],
+    requiresHumanReview,
+    blockingReasons,
+    spatialValidation: {
+      valid: spatialValidation.valid,
+      reviewRequired: spatialValidation.reviewRequired,
+      status: !spatialValidation.valid
+        ? 'invalid'
+        : spatialValidation.reviewRequired
+          ? 'review_required'
+          : 'passed',
+      issueCount: (spatialValidation.issues || []).length,
+      issuesByCode: spatialValidation.metrics?.issuesByCode || {},
+      // Keep the geometric evidence in the published artifact so each review
+      // item can be traced to source entities and measured intersections.
+      issues: serializeSpatialIssues(spatialValidation.issues || []),
+      roomBounds: (repaired.rooms || []).map((room) => ({
+        id: room.id || null,
+        name: room.name || null,
+        x: room.x ?? null,
+        y: room.y ?? null,
+        width: room.width ?? null,
+        height: room.height ?? null
+      })),
+      metrics: spatialValidation.metrics || {}
+    },
     outputDir
   };
 }
 
 function summarize(results) {
   const valid = results.filter((row) => !row.error);
-  const ready = valid.filter((row) => row.readinessStatus === 'commercial_ready');
-  const review = valid.filter((row) => row.readinessStatus === 'needs_human_review');
+  // Do not advertise a sample as commercially ready when independent spatial validation still requires review.
+  const ready = valid.filter((row) => row.readinessStatus === 'commercial_ready'
+    && !row.requiresHumanReview
+    && !row.spatialValidation?.reviewRequired
+    && row.spatialValidation?.valid);
+  const review = valid.filter((row) => row.requiresHumanReview);
   const blocked = valid.filter((row) => row.readinessStatus === 'blocked');
   return {
     total: results.length,
@@ -162,51 +436,80 @@ function summarize(results) {
     commercialReady: ready.length,
     needsHumanReview: review.length,
     blocked: blocked.length,
-    commercialReadyRate: Number((ready.length / Math.max(1, valid.length) * 100).toFixed(1)),
+    preprocessingLowQuality: valid.filter((row) => Number(row.visualEvidence?.preprocessingQualityScore || 0) < 0.5).length,
+    structuralWallVectors: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.structuralWallVectorCount || 0), 0),
+    detectedWallBands: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.wallBandCount || 0), 0),
+    detectedRoomInteriors: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.roomInteriorCandidateCount || 0), 0),
+    doorSymbolCandidates: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.doorSymbolCandidateCount || 0), 0),
+    windowSymbolCandidates: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.windowSymbolCandidateCount || 0), 0),
+    acceptedVisualDoors: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.acceptedDoorCount || 0), 0),
+    acceptedVisualWindows: valid.reduce((sum, row) => sum + Number(row.visualEvidence?.acceptedWindowCount || 0), 0),
+    confirmedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.confirmedCount || 0), 0),
+    proposedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.proposedCount || 0), 0),
+    suppressedOpenings: valid.reduce((sum, row) => sum + Number(row.openingEvidence?.suppressedCount || 0), 0),
+    spatialReviewRequired: valid.filter((row) => row.spatialValidation?.reviewRequired).length,
+    commercialReadyRate: valid.length ? Number((ready.length / valid.length * 100).toFixed(1)) : null,
     avgReadinessScore: Number((valid.reduce((sum, row) => sum + Number(row.readinessScore || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgGeometryConfidence: Number((valid.reduce((sum, row) => sum + Number(row.geometryConfidence || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgSemanticsConfidence: Number((valid.reduce((sum, row) => sum + Number(row.semanticsConfidence || 0), 0) / Math.max(1, valid.length)).toFixed(2)),
     avgRooms: Number((valid.reduce((sum, row) => sum + row.rooms, 0) / Math.max(1, valid.length)).toFixed(1)),
-    avgAttachedOpeningRatio: Number((valid.reduce((sum, row) => sum + row.attachedOpeningRatio, 0) / Math.max(1, valid.length)).toFixed(2))
+    avgAttachedOpeningRatio: valid.length && valid.some((row) => row.attachedOpeningRatio != null)
+      ? Number((valid.filter((row) => row.attachedOpeningRatio != null).reduce((sum, row) => sum + row.attachedOpeningRatio, 0) / valid.filter((row) => row.attachedOpeningRatio != null).length).toFixed(2))
+      : null
   };
 }
 
-const limit = Number(getArg('--limit', '12')) || 12;
-const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
-const images = collectCandidates().slice(0, limit);
-fs.mkdirSync(outputRoot, { recursive: true });
-
-const results = [];
-for (const image of images) {
-  const outDir = path.join(outputRoot, slugify(image));
-  const started = Date.now();
-  try {
-    const row = evaluateImage(image, outDir);
-    results.push({ ...row, durationMs: Date.now() - started });
-    process.stderr.write(`OK ${path.basename(image)} -> ${row.readinessStatus}:${row.readinessScore} rooms=${row.rooms}\n`);
-  } catch (error) {
-    results.push({
-      image,
-      name: path.basename(image),
-      error: error.message,
-      durationMs: Date.now() - started
-    });
-    process.stderr.write(`ERR ${path.basename(image)} -> ${error.message}\n`);
+function main() {
+  const limit = Number(getArg('--limit', '12')) || 12;
+  const outputRoot = path.resolve(getArg('--output', path.join(root, 'tmp', 'batch-recognition-multi')));
+  const requestedImage = getArg('--image');
+  const requestedLayout = getArg('--layout');
+  const discoveredImages = collectCandidates({ imagePath: requestedImage });
+  if (discoveredImages.length === 0) {
+    throw new Error(
+      'No floor-plan images found for batch recognition. Check backend/uploads/floorplans/kujiale(-xinfu), or add one of the configured local upload images before running this script.'
+    );
   }
+  const images = discoveredImages.slice(0, limit);
+  fs.mkdirSync(outputRoot, { recursive: true });
+
+  const results = [];
+  for (const image of images) {
+    const outDir = path.join(outputRoot, slugify(image));
+    const started = Date.now();
+    try {
+      const row = evaluateImage(image, outDir, requestedLayout);
+      results.push({ ...row, durationMs: Date.now() - started });
+      process.stderr.write(`OK ${path.basename(image)} -> ${row.readinessStatus}:${row.readinessScore} rooms=${row.rooms}\n`);
+    } catch (error) {
+      results.push({
+        image,
+        name: path.basename(image),
+        error: error.message,
+        durationMs: Date.now() - started
+      });
+      process.stderr.write(`ERR ${path.basename(image)} -> ${error.message}\n`);
+    }
+  }
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    aggregate: summarize(results),
+    results
+  };
+
+  fs.writeFileSync(path.join(outputRoot, 'summary.json'), JSON.stringify(report, null, 2), 'utf8');
+  console.log(JSON.stringify(report.aggregate, null, 2));
+  for (const row of results) {
+    if (row.error) {
+      console.log(`- ${row.name}: ERROR ${row.error}`);
+      continue;
+    }
+    console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${row.attachedOpeningRatio == null ? 'N/A' : `${(row.attachedOpeningRatio * 100).toFixed(0)}%`}`);
+  }
+
 }
 
-const report = {
-  generatedAt: new Date().toISOString(),
-  aggregate: summarize(results),
-  results
-};
-
-fs.writeFileSync(path.join(outputRoot, 'summary.json'), JSON.stringify(report, null, 2), 'utf8');
-console.log(JSON.stringify(report.aggregate, null, 2));
-for (const row of results) {
-  if (row.error) {
-    console.log(`- ${row.name}: ERROR ${row.error}`);
-    continue;
-  }
-  console.log(`- ${row.name} [${row.layout || '未知户型'}] -> ${row.readinessStatus} ${row.readinessScore}, 几何${row.geometryConfidence}, 语义${row.semanticsConfidence}, 房间${row.rooms}, 门窗贴墙${(row.attachedOpeningRatio * 100).toFixed(0)}%`);
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  main();
 }
