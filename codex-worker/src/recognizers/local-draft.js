@@ -4404,6 +4404,17 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     .map((room) => room.name || room.id)
     .filter(Boolean);
   const partialOcrLabelRooms = list.filter((room) => room?.sourceEvidence?.ocrLabelNeedsReview);
+  const groundedTexts = new Set(list.map((room) => room?.sourceEvidence?.ocrText).filter(Boolean));
+  const unassignedOcrRoomLabels = ocrCandidates
+    .map(normalizeOcrCandidate)
+    .filter((label) => label && label.type !== 'space' && !groundedTexts.has(label.text))
+    .map((label) => ({
+      text: label.text,
+      center: label.center,
+      confidence: label.confidence,
+      source: label.source,
+      candidateId: label.candidateId
+    }));
   return {
     roomCount: list.length,
     ocrCandidateCount: ocrCandidates.length,
@@ -4411,6 +4422,8 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     ocrGroundedRoomNames,
     partialOcrLabelCount: partialOcrLabelRooms.length,
     partialOcrLabelRoomNames: partialOcrLabelRooms.map((room) => room.name || room.id).filter(Boolean),
+    unassignedOcrRoomLabelCount: unassignedOcrRoomLabels.length,
+    unassignedOcrRoomLabels,
     templateOnlyRoomCount: templateOnly,
     layoutCountInferredRoomCount: layoutCountInferred,
     namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamedRooms.length,
