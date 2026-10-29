@@ -311,6 +311,21 @@ function evaluateImage(filePath, outputDir, layoutOverride = '') {
     semanticsConfidence: repaired.confidence?.semantics ?? null,
     rooms: (repaired.rooms || []).length,
     roomNames: (repaired.rooms || []).map((room) => room.name || room.id),
+    roomDetails: (repaired.rooms || []).map((room) => ({
+      id: room.id || '',
+      name: room.name || '',
+      type: room.type || '',
+      x: room.x ?? null,
+      y: room.y ?? null,
+      width: room.width ?? null,
+      height: room.height ?? null,
+      source: room.source || '',
+      ocrText: room.sourceEvidence?.ocrText || '',
+      ocrCenter: room.sourceEvidence?.ocrCenter || null,
+      ocrInsideRoom: room.sourceEvidence?.ocrInsideRoom ?? null,
+      boundaryNeedsReview: Boolean(room.boundaryNeedsReview || room.sourceEvidence?.boundaryNeedsReview),
+      semanticNeedsReview: Boolean(room.semanticNeedsReview || room.sourceEvidence?.semanticNeedsReview)
+    })),
     walls: (repaired.walls || []).length,
     openings: openings.length,
     visualEvidence: {
