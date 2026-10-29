@@ -162,3 +162,29 @@ This knowledge base is intentionally distinct from the drawing-symbol catalog:
 For each room candidate, the intended runtime result is an auditable evidence record: candidate types, supporting evidence grouped by independent source, contradictions, semantic confidence, geometric confidence, missing evidence, and review status. Text labels must not override strong contradictory visual evidence. In a no-text plan, the same reasoning process applies without the label feature. A missing fixture is not a contradiction unless image quality and detector coverage make its absence meaningful.
 
 **Integration status:** the knowledge base is now versioned in the repository, but its rules are not yet fully wired into the runtime room-classification path. Until that integration and its regression tests are completed, existing heuristics should not be described as using the full knowledge base or as self-learning.
+
+## Recognition error book: post-run review and learning loop
+
+The first consolidated error book lives at `backend/data/recognition-error-book.json`. Each case records the symptom, wrong outcome, root cause, ground truth, prevention rule, regression check, evidence references, confidence, and lifecycle. The initial set covers semantic keyword overreach, cross-room OCR assignment, OCR crop/normalization, open-plan living/dining zones, opening-to-room association, thick-wall appearance sampling, supplemental-room review gates, symbol lookalikes, and silent visual-runtime fallback.
+
+Case status is deliberately explicit:
+- `observed`: supported by an existing implementation path, workflow gate, or documented iteration.
+- `risk`: plausible failure mode inferred from code/design, not yet confirmed as a historical incident.
+
+The validator checks required fields, unique IDs, evidence references, lifecycle values, and regression-check descriptions. Run it with:
+
+```sh
+npm run validate:error-book
+```
+
+### Required review loop after each recognition run
+
+1. Save the input image/sample ID, run/commit, OCR candidates with source coordinates, room/fixture/wall/opening candidates, final draft, diagnostics, and any human correction.
+2. Compare predicted output with confirmed truth; list false positives, false negatives, wrong associations, missing geometry, and unsupported certainty.
+3. Trace each failure to its earliest responsible stage. Record both the immediate bug and the underlying assumption that caused it.
+4. Add or update one deduplicated case. Preserve the original wrong result and the corrected truth so the case explains **why it was wrong**, not just what the answer should be.
+5. Add a minimal executable regression test before marking the code fix complete.
+6. Re-run the validator, targeted test, `npm run verify:2d3d`, and the real-sample CI path when relevant.
+7. Move lifecycle from `open` to `guarded` when a prevention gate exists, to `fixed` after the implementation change, and to `verified` only after the regression check passes. Reopen it if a later sample reproduces the failure.
+
+**Current limitation:** this commit creates and validates the reusable error-book format and seeds it with evidence-backed recurring pitfalls. It does not yet automatically ingest every run's reports, and the room-semantic knowledge base is still not connected to the runtime classifier. The learning loop is therefore documented and structured, but not yet fully automated.
