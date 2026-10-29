@@ -1373,9 +1373,6 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
       if (template.name !== label.text && templateType !== label.type) {
         continue;
       }
-      if (!roomContainsPoint(template, label.center)) {
-        continue;
-      }
       const center = roomCenter(template);
       const distance = Math.hypot(center.x - label.center.x, center.y - label.center.y);
       if (!best || distance < best.distance) {
@@ -4428,7 +4425,8 @@ function summarizeRoomSemanticEvidence(rooms = [], preprocessing = {}) {
     layoutCountInferredRoomCount: layoutCountInferred,
     namedRoomWithoutExplicitSemanticEvidenceCount: ungroundedNamedRooms.length,
     namedRoomsWithoutExplicitSemanticEvidence: ungroundedNamedRooms.map((room) => room.name || room.id).filter(Boolean),
-    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0 && templateOnly === 0 && layoutCountInferred === 0,
+    semanticLabelsFullyImageGrounded: ocrGrounded === list.length && list.length > 0,
+    roomGeometryFullyImageGrounded: list.length > 0 && templateOnly === 0 && layoutCountInferred === 0,
     note: ocrCandidates.length === 0
       ? 'No OCR text candidates were produced; room names may be inferred from layout heuristics and must not be treated as image-confirmed.'
       : 'OCR-derived labels are tracked separately from template/layout-count inference.'
