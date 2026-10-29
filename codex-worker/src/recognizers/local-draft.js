@@ -1330,6 +1330,9 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
       if (room.sourceEvidence?.ocrText || room.type !== label.type || room.boundaryNeedsReview || room.sourceEvidence?.boundaryNeedsReview) {
         continue;
       }
+      if (!roomContainsPoint(room, label.center)) {
+        continue;
+      }
       const center = roomCenter(room);
       const distance = Math.hypot(center.x - label.center.x, center.y - label.center.y);
       if (distance > maxRelabelDistance) {
@@ -1368,6 +1371,9 @@ function supplementRoomsWithOcrLabels(geometryRooms = [], templateRooms = [], oc
       }
       const templateType = template.type || inferRoomType(template.name);
       if (template.name !== label.text && templateType !== label.type) {
+        continue;
+      }
+      if (!roomContainsPoint(template, label.center)) {
         continue;
       }
       const center = roomCenter(template);
@@ -1592,7 +1598,7 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
     const existingDistance = existingCenter
       ? Math.hypot(existingCenter.x - label.center.x, existingCenter.y - label.center.y)
       : Infinity;
-    if (existing && (roomContainsPoint(existing, label.center, 24) || existingDistance <= Math.hypot(toNumber(existing.width), toNumber(existing.height)) * 0.85)) {
+    if (existing && roomContainsPoint(existing, label.center)) {
       if (!existing.sourceEvidence?.ocrText) {
         const { semanticNeedsReview, ...roomWithoutSemanticReview } = existing;
         const { semanticNeedsReview: evidenceSemanticNeedsReview, ...sourceEvidence } = existing.sourceEvidence || {};
@@ -1607,7 +1613,7 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
             ocrText: label.text,
             ocrSource: label.source,
             ocrDistance: Number(existingDistance.toFixed(1)),
-            ocrInsideRoom: roomContainsPoint(existing, label.center, 24),
+            ocrInsideRoom: true,
             ocrConfirmedExistingRoom: true
           }
         };
@@ -1620,13 +1626,13 @@ function recoverOcrLabeledRoomsFromGrid(geometryRooms = [], ocrCandidates = [], 
       if (candidate.type && candidate.type !== 'space') {
         continue;
       }
-      const labelInside = roomContainsPoint(candidate, label.center, 28);
+      const labelInside = roomContainsPoint(candidate, label.center);
+      if (!labelInside) {
+        continue;
+      }
       const center = roomCenter(candidate);
       const distance = Math.hypot(center.x - label.center.x, center.y - label.center.y);
       const maxDistance = Math.hypot(toNumber(candidate.width), toNumber(candidate.height)) * 0.82;
-      if (!labelInside && distance > maxDistance) {
-        continue;
-      }
       const edgeScore = toNumber(candidate.sourceEvidence?.edgeScore, 0);
       const weakEdges = toNumber(candidate.sourceEvidence?.weakEdges, 0);
       if (weakEdges < 3 || edgeScore < 0.42) {
