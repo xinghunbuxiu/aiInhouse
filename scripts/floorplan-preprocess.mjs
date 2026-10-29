@@ -2271,6 +2271,7 @@ def augment_ocr_from_region_crops(candidates, regions):
             cv2.imwrite(tmp.name, crop)
             crops += 1
             try:
+                region_found_before = found
                 for psm in (11, 6):
                     result = subprocess.run([binary, tmp.name, "stdout", "-l", "chi_sim+eng", "--psm", str(psm), "tsv"],
                         capture_output=True, text=True, timeout=12, check=False)
@@ -2319,6 +2320,8 @@ def augment_ocr_from_region_crops(candidates, regions):
                             "evidence": {"engine": "tesseract", "regionId": region.get("id"), "regionSource": region.get("source"), "pageSegmentationMode": psm}
                         })
                         found += 1
+                    if found > region_found_before:
+                        break
             finally:
                 try:
                     os.remove(tmp.name)
