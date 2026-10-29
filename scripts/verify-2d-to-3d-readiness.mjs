@@ -104,6 +104,10 @@ assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.ocrGrounded
   'Semantic evidence audit must list OCR-grounded room names, not only aggregate counts.');
 assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.namedRoomsWithoutExplicitSemanticEvidence),
   'Semantic evidence audit must identify room names that still lack explicit image-text evidence.');
+assert(Array.isArray(appearanceDraft.quality?.semanticEvidenceAudit?.unassignedOcrRoomLabels),
+  'Semantic evidence audit must list recognized room labels that were not assigned to output rooms.');
+assert(typeof appearanceDraft.quality?.semanticEvidenceAudit?.roomGeometryFullyImageGrounded === 'boolean',
+  'Room geometry grounding must be reported separately from OCR label grounding.');
 
 
 // Regression: a room label must never jump across a wall into a neighboring room.
