@@ -146,3 +146,19 @@ For the checked-in `WX20260329-112615@2x.png` sample (1400×976), the last inspe
 4. Fix the narrowest responsible stage; add the exact failing case to a regression test.
 5. Re-run `npm run verify:2d3d` and the real-sample workflow. Only call end-to-end complete after 3D mesh and panorama artifacts are validated, not merely because the recognition job exits zero.
 
+
+
+## Evidence-based room semantics and reusable experience
+
+The versioned starter knowledge base is stored at `backend/data/room-semantic-reasoning.json`. It describes supporting evidence, contradiction checks, independent evidence groups, and conservative decisions for bathrooms, balconies, bedrooms, kitchens, living rooms, and dining areas.
+
+This knowledge base is intentionally distinct from the drawing-symbol catalog:
+
+- **Symbol catalog** answers “what visual object might this mark represent?”
+- **Room-semantic reasoning** answers “given the objects, boundaries, openings, and neighboring spaces, what use best explains this region?”
+- **Spatial validation** answers “does the proposed geometry satisfy boundary, overlap, connectivity, and opening constraints?”
+- **Experience cases** must capture reviewed outcomes and regression tests; a static rule file alone is not self-learning.
+
+For each room candidate, the intended runtime result is an auditable evidence record: candidate types, supporting evidence grouped by independent source, contradictions, semantic confidence, geometric confidence, missing evidence, and review status. Text labels must not override strong contradictory visual evidence. In a no-text plan, the same reasoning process applies without the label feature. A missing fixture is not a contradiction unless image quality and detector coverage make its absence meaningful.
+
+**Integration status:** the knowledge base is now versioned in the repository, but its rules are not yet fully wired into the runtime room-classification path. Until that integration and its regression tests are completed, existing heuristics should not be described as using the full knowledge base or as self-learning.
