@@ -29,6 +29,8 @@ jobs:
       - name: Verify the exact Python runtime has OpenCV
         run: python -c "import cv2, numpy, PIL; print('python OpenCV runtime:', cv2.__version__, 'numpy:', numpy.__version__, 'Pillow:', PIL.__version__)"
       - run: npm ci
+      - name: Validate recognition error book
+        run: npm run validate:error-book
       - run: npm run verify:2d3d
       - name: Verify Blender shared-wall geometry without Blender runtime
         run: python scripts/blender/test_shared_room_walls.py
