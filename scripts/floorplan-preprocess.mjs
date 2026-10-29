@@ -2306,6 +2306,16 @@ def augment_ocr_from_region_crops(candidates, regions):
                         key = (joined, round(cx / 8), round(cy / 8))
                         if key in seen:
                             continue
+                        near_existing = any(
+                            str(existing.get("text", "")).strip() == joined
+                            and math.hypot(
+                                float((existing.get("center") or {}).get("x", existing.get("x", 0))) - cx,
+                                float((existing.get("center") or {}).get("y", existing.get("y", 0))) - cy
+                            ) <= 40
+                            for existing in results
+                        )
+                        if near_existing:
+                            continue
                         seen.add(key)
                         results.append({
                             "id": "tesseract-region-%s-%d" % (region.get("id", "candidate"), len(results) + 1),
