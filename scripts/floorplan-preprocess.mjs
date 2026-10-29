@@ -2240,6 +2240,98 @@ window_symbol_candidates = detect_window_symbol_candidates()
 door_symbol_candidates = detect_door_symbol_candidates()
 furniture_symbol_candidates, annotation_symbol_candidates = detect_furniture_symbol_candidates()
 
+# Run focused OCR over geometry-derived room and balcony regions. Full-image OCR
+# often misses small labels beside furniture; region crops increase text scale
+# while preserving image-coordinate evidence for downstream containment checks.
+def augment_ocr_from_region_crops(candidates, regions):
+    binary = shutil.which("tesseract")
+    if not binary:
+        return candidates, {"regionCropCount": 0, "regionLabelCount": 0, "error": "tesseract_not_installed"}
+    pattern = re.compile(r"^(主卧(室)?|次卧(室)?|卧室[一二三四五六七八九0-9]?|男孩卧(室)?|女孩卧(室)?|儿童房|客厅|客餐厅|餐厅|厨房|主卫|次卫|卫生间|洗手间|浴室|阳台|门厅|玄关|书房|储物间|衣帽间|过道|楼梯间)$")
+    results = list(candidates or [])
+    crops = 0
+    found = 0
+    seen = set()
+    for region in regions or []:
+        try:
+            x = max(0, int(region.get("x", 0)))
+            y = max(0, int(region.get("y", 0)))
+            width = int(region.get("width", 0))
+            height = int(region.get("height", 0))
+            if width < 30 or height < 20 or x >= w or y >= h:
+                continue
+            x2, y2 = min(w, x + width), min(h, y + height)
+            crop = gray[y:y2, x:x2]
+            if crop.size == 0:
+                continue
+            crop = cv2.copyMakeBorder(crop, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=255)
+            crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            tmp = tempfile.NamedTemporaryFile(prefix="aiinhouse-ocr-region-", suffix=".png", delete=False)
+            tmp.close()
+            cv2.imwrite(tmp.name, crop)
+            crops += 1
+            try:
+                for psm in (11, 6):
+                    result = subprocess.run([binary, tmp.name, "stdout", "-l", "chi_sim+eng", "--psm", str(psm), "tsv"],
+                        capture_output=True, text=True, timeout=12, check=False)
+                    if result.returncode != 0:
+                        continue
+                    grouped = {}
+                    for row in csv.DictReader(io.StringIO(result.stdout), delimiter="\t"):
+                        if row.get("level") != "5":
+                            continue
+                        word = (row.get("text") or "").strip().strip("|.,:;，。；：、!！?？“”‘’()（）{}")
+                        if not word:
+                            continue
+                        try:
+                            confidence = float(row.get("conf") or -1)
+                            bx, by = int(row.get("left") or 0), int(row.get("top") or 0)
+                            bw, bh = int(row.get("width") or 0), int(row.get("height") or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        key = (row.get("block_num"), row.get("par_num"), row.get("line_num"))
+                        item = grouped.setdefault(key, {"words": [], "x1": bx, "y1": by, "x2": bx+bw, "y2": by+bh, "conf": []})
+                        item["words"].append(word)
+                        item["x1"], item["y1"] = min(item["x1"], bx), min(item["y1"], by)
+                        item["x2"], item["y2"] = max(item["x2"], bx+bw), max(item["y2"], by+bh)
+                        item["conf"].append(confidence)
+                    for item in grouped.values():
+                        joined = "".join(item["words"])
+                        if not pattern.fullmatch(joined):
+                            continue
+                        confidence = round(sum(item["conf"]) / max(1, len(item["conf"])) / 100, 3)
+                        cx = x + (item["x1"] + item["x2"]) / 6.0 - 8
+                        cy = y + (item["y1"] + item["y2"]) / 6.0 - 8
+                        key = (joined, round(cx / 8), round(cy / 8))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        results.append({
+                            "id": "tesseract-region-%s-%d" % (region.get("id", "candidate"), len(results) + 1),
+                            "text": joined,
+                            "x": max(0, x + item["x1"] / 3.0 - 8/3),
+                            "y": max(0, y + item["y1"] / 3.0 - 8/3),
+                            "width": max(1, (item["x2"] - item["x1"]) / 3.0),
+                            "height": max(1, (item["y2"] - item["y1"]) / 3.0),
+                            "center": {"x": cx, "y": cy},
+                            "confidence": confidence,
+                            "source": "tesseract:room-region:psm%d" % psm,
+                            "evidence": {"engine": "tesseract", "regionId": region.get("id"), "regionSource": region.get("source"), "pageSegmentationMode": psm}
+                        })
+                        found += 1
+            finally:
+                try:
+                    os.remove(tmp.name)
+                except OSError:
+                    pass
+        except Exception:
+            continue
+    return results, {"regionCropCount": crops, "regionLabelCount": found, "regionSource": "room-interior-and-balcony-candidates"}
+
+ocr_candidates, region_ocr_status = augment_ocr_from_region_crops(ocr_candidates, room_interior_candidates + balcony_candidates)
+ocr_status["regionOcr"] = region_ocr_status
+ocr_status["candidateCount"] = len(ocr_candidates)
+
 # Add explicit spatial evidence after raw scanning. This does not claim semantic
 # certainty; it records which room contains each candidate and its nearest
 # neighboring objects so downstream analysis can reason about the full layout.
